@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { round2 } from '@/lib/engine/double-entry'
 import { fmtEUR } from '@/lib/engine/format'
@@ -22,7 +23,8 @@ interface MatchedLineRef {
 async function readMatchedRefs(month: number): Promise<MatchedLineRef[]> {
   const rec = await db.bankReconciliation.findUnique({ where: { month } })
   if (!rec) return []
-  return Array.isArray(rec.matchedLines) ? (rec.matchedLines as MatchedLineRef[]) : []
+  // Json Prisma : cast contrôlé (matchedLines sérialisé par cette même route)
+  return Array.isArray(rec.matchedLines) ? (rec.matchedLines as unknown as MatchedLineRef[]) : []
 }
 
 async function saveMatchedRefs(month: number, refs: MatchedLineRef[], status?: string) {
@@ -30,11 +32,12 @@ async function saveMatchedRefs(month: number, refs: MatchedLineRef[], status?: s
   if (existing) {
     await db.bankReconciliation.update({
       where: { month },
-      data: { matchedLines: refs, ...(status ? { status } : {}), updatedAt: new Date() },
+      // Json Prisma : cast contrôlé (structure vérifiée)
+      data: { matchedLines: refs as unknown as Prisma.InputJsonValue, ...(status ? { status } : {}), updatedAt: new Date() },
     })
   } else {
     await db.bankReconciliation.create({
-      data: { month, status: status ?? 'IN_PROGRESS', matchedLines: refs },
+      data: { month, status: status ?? 'IN_PROGRESS', matchedLines: refs as unknown as Prisma.InputJsonValue },
     })
   }
 }

@@ -4,10 +4,16 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { ProgressPct } from '@/components/simulator/shared/ui-bits'
 import { useToast } from '@/hooks/use-toast'
 import { fmtDate, fmtDateLong } from '@/lib/engine/format'
-import { Award, Copy, Info, Lock, Printer } from 'lucide-react'
+import { Award, ChevronDown, Copy, FileCode2, FileText, Info, Lock, Printer } from 'lucide-react'
 
 // ============================================================
 // ATTESTATION DE FIN DE PARCOURS — section de la vue Évaluation
@@ -19,6 +25,9 @@ import { Award, Copy, Info, Lock, Printer } from 'lucide-react'
 //   - parcours A non terminé : aperçu flouté + badge de progression
 // F-8a : bouton « Copier » (presse-papiers) — version texte brut miroir
 //   du document, API Clipboard puis repli textarea + execCommand('copy').
+// F-9d : le bouton devient un menu — « Texte brut » (F-8a) ou
+//   « Markdown enrichi » (titres, gras, tableau des statistiques),
+//   même logique de presse-papiers et même règle d'activation.
 // Type partagé avec /api/progress (import type, aucun runtime).
 // ============================================================
 
@@ -157,14 +166,66 @@ export function CertificateCard({ certificate }: { certificate?: CertificateData
     ].join('\n')
   }
 
+  // Version Markdown enrichie de l’attestation (F-9d) : même contenu que la
+  // version texte brut (une seule source pour les libellés : stats,
+  // parcoursLabel, PLURAL), mise en forme destinée aux dépôts Markdown
+  // (portfolios, notes Obsidian/Notion…) — titre, corps, tableau des
+  // statistiques, signature et petit-print en italique.
+  const certificateMarkdown = () => {
+    const jobSegment = cert.learnerJobTitle ? ` — *${cert.learnerJobTitle}* — ` : ' '
+    const body =
+      `Certifie que **${cert.learnerName}**${jobSegment}` +
+      `${completed ? 'a suivi et complété' : 'a suivi'} le parcours **${parcoursLabel}**` +
+      `${completed ? '' : ` — en cours de validation (${cert.modulesACompleted} ${PLURAL(cert.modulesACompleted, 'module validé', 'modules validés')} sur ${cert.modulesATotal})`}` +
+      `, avec un score moyen de **${avgPct} %** sur ${cert.exercisesPassed} ${PLURAL(cert.exercisesPassed, 'exercice réussi', 'exercices réussis')}` +
+      `, et contribué à la résolution de ${cert.anomaliesResolved} ${PLURAL(cert.anomaliesResolved, 'anomalie', 'anomalies')} du dossier.`
+    const mentions: string[] = []
+    if (cert.issuedAt) mentions.push(`Parcours Comptabilité achevé le ${fmtDate(cert.issuedAt)}`)
+    if (completed && !cert.pathBCompleted)
+      mentions.push(
+        `poursuite de la formation : Audit externe — ${cert.modulesBCompleted}/${cert.modulesBTotal} modules validés`,
+      )
+    const statsTable = [
+      '| Indicateur | Valeur | Détail |',
+      '| --- | --- | --- |',
+      ...stats.map((s) => `| ${s.label} | **${s.value}** | ${s.hint} |`),
+    ].join('\n')
+    return [
+      '# ATTESTATION DE FIN DE PARCOURS',
+      '',
+      '**Accounting & Audit Simulator** — Formation professionnelle',
+      '*Dossier pédagogique NOVATECH DISTRIBUTION SAS*',
+      '',
+      '---',
+      '',
+      body,
+      ...(mentions.length ? ['', `> ${mentions.join(' · ')}`] : []),
+      '',
+      statsTable,
+      '',
+      '---',
+      '',
+      `**Fait le** ${today}`,
+      '',
+      `**Le chef de mission** — *${CHIEF_NAME}*`,
+      '',
+      '---',
+      '',
+      '*Document généré localement par le simulateur — dossier fictif NOVATECH DISTRIBUTION SAS. ' +
+        'Cette attestation témoigne d’exercices réussis en environnement simulé : elle ne vaut ni diplôme, ' +
+        'ni certification professionnelle, et ne remplace pas la supervision d’un professionnel en situation réelle.*',
+    ].join('\n')
+  }
+
   // CHOIX D'ACTIVATION (F-8a) : « Copier » suit exactement la même règle que
   // « Imprimer » — désactivé tant que le parcours A n'est pas terminé.
   // L'aperçu verrouillé est volontairement flouté et son texte (« a suivi …
   // en cours de validation ») ne vaut pas attestation : le copier porterait
   // à confusion. Le bouton s'active donc au déblocage de l'impression.
-  const copyCertificate = async () => {
+  // F-9d : la règle s'applique aux deux formats du menu (texte/Markdown).
+  const copyCertificate = async (format: 'text' | 'markdown') => {
     if (!completed) return
-    const text = certificatePlainText()
+    const text = format === 'markdown' ? certificateMarkdown() : certificatePlainText()
     try {
       if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
         await navigator.clipboard.writeText(text)
@@ -187,7 +248,10 @@ export function CertificateCard({ certificate }: { certificate?: CertificateData
     }
     toast({
       title: 'Attestation copiée',
-      description: 'Le texte de l’attestation est dans le presse-papiers.',
+      description:
+        format === 'markdown'
+          ? 'La version Markdown de l’attestation est dans le presse-papiers.'
+          : 'Le texte de l’attestation est dans le presse-papiers.',
     })
   }
 
@@ -198,17 +262,39 @@ export function CertificateCard({ certificate }: { certificate?: CertificateData
           <Award className="size-4 text-primary" aria-hidden /> Attestation de fin de parcours
         </CardTitle>
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="no-print gap-1.5"
-            onClick={copyCertificate}
-            disabled={!completed}
-            aria-disabled={!completed}
-            title="Copier le texte de l’attestation dans le presse-papiers"
-          >
-            <Copy className="size-3.5" aria-hidden /> Copier
-          </Button>
+          {/* F-9d — « Copier » devient un menu : texte brut (F-8a) ou
+              Markdown enrichi. Même règle d'activation que l'impression. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="no-print gap-1"
+                disabled={!completed}
+                aria-disabled={!completed}
+                title="Copier l’attestation dans le presse-papiers (texte brut ou Markdown)"
+              >
+                <Copy className="size-3.5" aria-hidden /> Copier
+                <ChevronDown className="size-3 opacity-60" aria-hidden />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onClick={() => void copyCertificate('text')} className="gap-2">
+                <FileText className="size-4 text-primary" aria-hidden />
+                <span className="flex flex-col">
+                  <span className="text-sm">Texte brut</span>
+                  <span className="text-xs text-muted-foreground">mise en forme plate, partout compatible</span>
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => void copyCertificate('markdown')} className="gap-2">
+                <FileCode2 className="size-4 text-primary" aria-hidden />
+                <span className="flex flex-col">
+                  <span className="text-sm">Markdown enrichi</span>
+                  <span className="text-xs text-muted-foreground">titres, gras et tableau des statistiques</span>
+                </span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
             variant="outline"
             size="sm"

@@ -118,8 +118,9 @@ export async function POST(request: Request) {
 
     const saved = await db.setting.upsert({
       where: { key: PROGRESS_KEY },
-      update: { value: next as Prisma.InputJsonValue },
-      create: { key: PROGRESS_KEY, value: next as Prisma.InputJsonValue },
+      // Json Prisma : cast contrôlé (FlashcardsProgress sérialisé par cette même route)
+      update: { value: next as unknown as Prisma.InputJsonValue },
+      create: { key: PROGRESS_KEY, value: next as unknown as Prisma.InputJsonValue },
     })
     const savedProgress = sanitizeProgress(saved.value)
 

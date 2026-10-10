@@ -288,6 +288,12 @@ export interface LessonBlock {
   text?: string
   items?: string[]
   table?: { headers: string[]; rows: string[][] }
+  // Format plat historique des blocs « table » (fiches pratiques du centre
+  // de connaissances + leçons du parcours B) : headers/rows portés au
+  // premier niveau. Le rendu (lesson-blocks.tsx) ne lit que `table` —
+  // ces champs reflètent les données réelles, sans changement de rendu.
+  headers?: string[]
+  rows?: string[][]
 }
 
 export interface LearningModule {

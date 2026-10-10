@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { getAppState, upsertAppState } from '@/lib/server/queries'
 
@@ -246,15 +247,16 @@ export async function POST(request: Request) {
         await tx.setting.upsert({
           where: { key: 'appState' },
           update: {
+            // Json Prisma : cast contrôlé (fusion d'objets plats, structure vérifiée)
             value: {
               ...current,
               ...incoming,
               // Les métadonnées du dossier restent celles du serveur local
               seededAt: current.seededAt ?? incoming.seededAt,
               dataVersion: current.dataVersion ?? incoming.dataVersion,
-            },
+            } as unknown as Prisma.InputJsonValue,
           },
-          create: { key: 'appState', value: incoming },
+          create: { key: 'appState', value: incoming as unknown as Prisma.InputJsonValue },
         })
         details.appState = true
       }

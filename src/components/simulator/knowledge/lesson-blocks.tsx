@@ -29,22 +29,31 @@ export function LessonBlockView({ block }: { block: LessonBlock }) {
           ) : null}
         </div>
       )
-    case 'table':
+    case 'table': {
+      // Deux formats coexistent dans les données : le format imbriqué du
+      // parcours A ({ table: { headers, rows } }) et le format plat
+      // historique des fiches pratiques et des leçons du parcours B
+      // ({ headers, rows } au premier niveau). Les deux sont acceptés ici —
+      // sans cela, les 19 tableaux du format plat n'affichaient que leur
+      // titre (corps de tableau invisible).
+      const src =
+        block.table ??
+        (block.headers != null && block.rows != null ? { headers: block.headers, rows: block.rows } : null)
       return (
         <div className="space-y-1">
           {block.title ? <p className="text-sm font-semibold">{block.title}</p> : null}
-          {block.table ? (
+          {src ? (
             <div className="overflow-x-auto rounded-md border">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/50">
-                    {block.table.headers.map((h) => (
+                    {src.headers.map((h) => (
                       <th key={h} className="px-2.5 py-2 text-left text-xs font-medium">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {block.table.rows.map((row, r) => (
+                  {src.rows.map((row, r) => (
                     <tr key={r} className="border-b last:border-0">
                       {row.map((cell, c) => (
                         <td key={c} className="px-2.5 py-1.5 align-top">{cell}</td>
@@ -57,6 +66,7 @@ export function LessonBlockView({ block }: { block: LessonBlock }) {
           ) : null}
         </div>
       )
+    }
     case 'tip':
       return (
         <div className="rounded-md border border-teal-300 bg-teal-50 p-3 dark:border-teal-900 dark:bg-teal-950" role="note">

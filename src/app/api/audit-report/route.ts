@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 
 // ============================================================
@@ -149,8 +150,9 @@ export async function POST(request: Request) {
     }
     await db.setting.upsert({
       where: { key: WORKSHEET_KEY },
-      update: { value: merged },
-      create: { key: WORKSHEET_KEY, value: merged },
+      // Json Prisma : cast contrôlé (worksheet fusionné, structure vérifiée)
+      update: { value: merged as unknown as Prisma.InputJsonValue },
+      create: { key: WORKSHEET_KEY, value: merged as unknown as Prisma.InputJsonValue },
     })
 
     return NextResponse.json({ text })

@@ -21,7 +21,7 @@ import { COMMON_ENTRY_ACCOUNTS, accountLabel } from '@/lib/engine/plan-comptable
 import { ASSETS } from '@/lib/data/assets'
 import { INVENTORY_ITEMS } from '@/lib/data/inventory'
 import { monthLabel } from '@/lib/engine/vat'
-import type { AnomalyDTO, BalanceLine, BalanceResult, GrandLivreResult } from '@/lib/types'
+import type { AnomalyDTO, BalanceLine, BalanceResult, EntryDTO, GrandLivreResult } from '@/lib/types'
 import {
   AlertTriangle,
   ArrowLeftRight,
@@ -925,7 +925,9 @@ function BankReconSection() {
   const currentMonth = useSimulator((s) => s.currentMonth)
   const [month, setMonth] = useState(String(currentMonth))
   const [selStatement, setSelStatement] = useState<string | null>(null)
-  const [selBook, setSelBook] = useState<{ entryId: string; lineId: string; amount: number } | null>(null)
+  // `pieceRef` reste facultatif : la sélection ne transporte que
+  // entryId/lineId/montant — le libellé d'appariement retombe sur entryId.
+  const [selBook, setSelBook] = useState<{ entryId: string; lineId: string; amount: number; pieceRef?: string } | null>(null)
 
   const statement = useQuery<{ lines: BankLineDTO[]; soldeFin: number }>({
     queryKey: ['bank-statement', month],

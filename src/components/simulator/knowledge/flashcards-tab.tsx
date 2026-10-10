@@ -284,7 +284,7 @@ export function FlashcardsTab() {
         return
       }
       if (e.key !== '1' && e.key !== '2') return
-      if (!session.flipped) return
+      if (!session || !session.flipped) return
       e.preventDefault()
       handleAnswer(e.key === '1' ? 'KNOWN' : 'REVIEW')
     }

@@ -242,7 +242,7 @@ export function ChiefWindow() {
   )
 }
 
-function ChiefBriefing({ task, fallbackModule }: { task: (typeof TASKS_BY_KEY)[string] | undefined; fallbackModule: string | null }) {
+function ChiefBriefing({ task, fallbackModule }: { task: (typeof TASKS_BY_KEY)[string] | null | undefined; fallbackModule: string | null }) {
   const navigate = useSimulator((s) => s.navigate)
   if (!task) {
     return (

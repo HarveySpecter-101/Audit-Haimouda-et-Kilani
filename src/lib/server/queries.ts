@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import type { RawLine } from '@/lib/engine/ledger'
 import { round2 } from '@/lib/engine/double-entry'
@@ -152,7 +153,8 @@ export async function upsertAppState(patch: Record<string, unknown>) {
   const current = await getAppState()
   await db.setting.upsert({
     where: { key: 'appState' },
-    update: { value: { ...current, ...patch } },
-    create: { key: 'appState', value: patch },
+    // Json Prisma : cast contrôlé (structure vérifiée — fusion d'objets plats)
+    update: { value: { ...current, ...patch } as unknown as Prisma.InputJsonValue },
+    create: { key: 'appState', value: patch as unknown as Prisma.InputJsonValue },
   })
 }

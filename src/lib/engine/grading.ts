@@ -311,7 +311,12 @@ export function gradeCase(ex: CaseExercise, ans: AttemptInput): AttemptFeedback 
     }
     if (stepFb) {
       scoreSum += stepFb.score
-      if (!stepFb.passed) critical = critical || (step.explanations?.critical ?? false) === true
+      // Le drapeau booléen de criticité vit au niveau de l'exercice
+      // (BaseExercise.critical) — `explanations` est un Record<string,string>
+      // (libellés par choix), donc l'ancienne lecture `.critical === true`
+      // était structurellement morte. Même résultat sur le corpus actuel :
+      // aucun cas de synthèse n'est marqué critical.
+      if (!stepFb.passed) critical = critical || ex.critical === true
       results.push(`${step.title} : ${Math.round(stepFb.score * 100)} %`)
     }
   }

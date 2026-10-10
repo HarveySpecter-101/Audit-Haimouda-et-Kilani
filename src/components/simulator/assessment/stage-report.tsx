@@ -23,6 +23,9 @@ export interface ProgressLite {
 export interface AttemptLite {
   exerciseKey: string
   moduleCode: string
+  // Chemin du parcours (« A » | « B ») — renvoyé par /api/attempts
+  // (consommé par le filtre de la vue Évaluation), absent des autres usages.
+  path?: string
   score: number
   passed: boolean
   criticalError: boolean

@@ -65,6 +65,12 @@ interface DashboardData {
     today: number
     bestDay: number
     streak: number
+    /** F-9b — tentatives réussies de la fenêtre courante (champ additif,
+     *  absent des payloads en cache antérieurs) — transmis au heatmap par
+     *  le spread {...d.activity}. */
+    passed?: number
+    /** F-9b — agrégats des 84 jours précédents (champ additif, optionnel) */
+    previous?: { total: number; activeDays: number; passed: number }
   }
 }
 

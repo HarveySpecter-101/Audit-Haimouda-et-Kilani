@@ -16,6 +16,11 @@ export async function GET(request: Request) {
     todayStart.setHours(0, 0, 0, 0)
     const activityStart = new Date(todayStart)
     activityStart.setDate(todayStart.getDate() - 83)
+    // F-9b — fenêtre PRÉCÉDENTE pour la comparaison : les 84 jours calendaires
+    // qui précèdent la fenêtre courante (aujourd'hui-167 → aujourd'hui-84).
+    // Les deux fenêtres sont couvertes par une seule requête (gte previousStart).
+    const previousStart = new Date(todayStart)
+    previousStart.setDate(todayStart.getDate() - 167)
     const [movement, openings, appState] = await Promise.all([getMovementLines(), getOpeningBalances(), getAppState()])
     const balance = computeBalance(movement, openings)
     const bilan = computeBilan(balance.lines)
@@ -30,10 +35,12 @@ export async function GET(request: Request) {
       db.anomaly.count({ where: { status: 'OPEN' } }),
       db.exerciseAttempt.findMany({ orderBy: { attemptedAt: 'desc' }, take: 8 }),
       db.progress.findMany(),
-      // Assiduité — une seule requête : tentatives des 12 dernières semaines (84 jours calendaires)
+      // Assiduité — une seule requête : tentatives des 24 dernières semaines
+      // (fenêtre courante 84 j + fenêtre précédente 84 j), avec le statut de
+      // réussite pour la comparaison de périodes (F-9b).
       db.exerciseAttempt.findMany({
-        select: { attemptedAt: true },
-        where: { attemptedAt: { gte: activityStart } },
+        select: { attemptedAt: true, passed: true },
+        where: { attemptedAt: { gte: previousStart } },
       }),
     ])
     const highAnomalies = await db.anomaly.count({ where: { status: 'OPEN', severity: { in: ['HIGH', 'CRITICAL'] } } })
@@ -62,14 +69,40 @@ export async function GET(request: Request) {
       activityIndex.set(key, i)
       activityDays.push({ date: key, count: 0 })
     }
+    // F-9b — grille des 84 jours précédents (même découpe par jour calendaire
+    // local) : elle n'est PAS renvoyée (payload au maigre — seuls total /
+    // jours actifs / réussites), mais garantit un découpage fuseau-safe.
+    const previousDays: { date: string; count: number }[] = []
+    const previousIndex = new Map<string, number>()
+    for (let i = 0; i < 84; i++) {
+      const d = new Date(previousStart)
+      d.setDate(previousStart.getDate() + i)
+      const key = dayKey(d)
+      previousIndex.set(key, i)
+      previousDays.push({ date: key, count: 0 })
+    }
     let activityTotal = 0
+    let activityPassed = 0
+    let previousTotal = 0
+    let previousPassed = 0
     for (const row of activityRows) {
-      const idx = activityIndex.get(dayKey(row.attemptedAt))
+      const key = dayKey(row.attemptedAt)
+      // Fenêtre courante d'abord, sinon fenêtre précédente (F-9b)
+      const idx = activityIndex.get(key)
       if (idx !== undefined) {
         activityDays[idx].count += 1
         activityTotal += 1
+        if (row.passed) activityPassed += 1
+        continue
+      }
+      const pIdx = previousIndex.get(key)
+      if (pIdx !== undefined) {
+        previousDays[pIdx].count += 1
+        previousTotal += 1
+        if (row.passed) previousPassed += 1
       }
     }
+    const previousActiveDays = previousDays.filter((x) => x.count > 0).length
     const countOn = (d: Date) => {
       const idx = activityIndex.get(dayKey(d))
       return idx === undefined ? 0 : activityDays[idx].count
@@ -131,6 +164,15 @@ export async function GET(request: Request) {
         today: todayCount,
         bestDay,
         streak,
+        // F-9b — champs ADDITIFS (rétrocompatibles) : réussites de la fenêtre
+        // courante + agrégats de la fenêtre précédente ; « days » reste limité
+        // à la fenêtre courante (aucune entrée supplémentaire envoyée).
+        passed: activityPassed,
+        previous: {
+          total: previousTotal,
+          activeDays: previousActiveDays,
+          passed: previousPassed,
+        },
       },
     })
   } catch (e) {

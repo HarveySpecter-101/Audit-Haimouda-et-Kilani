@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowUpRight, CalendarCheck, CheckCircle2, ChevronRight, Flame, X } from 'lucide-react'
+import { ArrowUpRight, CalendarCheck, CheckCircle2, ChevronRight, FileDown, Flame, X } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSimulator } from '@/lib/store/simulator-store'
 
@@ -27,11 +27,34 @@ import { useSimulator } from '@/lib/store/simulator-store'
 // F-8d : accès direct « aujourd'hui » — chip cliquable (toggle du
 //   panneau du dernier jour) + raccourci clavier local « D » quand le
 //   focus est dans le composant (cf. handleRootKeyDown).
+// F-9b : comparaison avec la période précédente — toggle « vs période
+//   précédente » (ChevronRight pivotant, aria-expanded) sous la légende,
+//   panneau compact de 3 métriques (tentatives, jours actifs, réussites)
+//   avec delta coloré + phrase de synthèse ; masqué si la prop
+//   « previous » est absente (payload en cache antérieur).
+// F-9c : export CSV de l'historique — bouton « Exporter CSV » (icône
+//   FileDown, no-print) dans la rangée des chips : BOM UTF-8,
+//   séparateur point-virgule (Excel-FR), constructeur pur
+//   buildActivityCsv() exporté et testable, téléchargement silencieux
+//   via Blob + ancre éphémère (aucun toast).
 // ============================================================
 
 export interface ActivityDay {
   date: string // 'YYYY-MM-DD'
   count: number
+}
+
+/** F-9b — agrégats des 84 jours précédant la fenêtre courante, tels que
+ *  renvoyés par /api/dashboard dans activity.previous. « passed » est
+ *  optionnel côté client : un payload partiel omet simplement la ligne
+ *  « Réussites » de la comparaison (dégradation gracieuse). */
+export interface ActivityPreviousPeriod {
+  /** Tentatives totales sur les 84 jours précédents */
+  total: number
+  /** Jours actifs (≥ 1 tentative) sur les 84 jours précédents */
+  activeDays: number
+  /** Tentatives réussies sur les 84 jours précédents */
+  passed?: number
 }
 
 export interface ActivityHeatmapProps {
@@ -46,6 +69,12 @@ export interface ActivityHeatmapProps {
   today?: number
   /** Champ « bestDay » du payload (sinon recalculé localement) */
   bestDay?: number
+  /** F-9b — tentatives réussies de la fenêtre courante (activity.passed) ;
+ *  absent des payloads en cache antérieurs → ligne « Réussites » omise */
+  passed?: number
+  /** F-9b — agrégats des 84 jours précédents (activity.previous) ; absent
+ *  des payloads en cache antérieurs → comparaison entièrement masquée */
+  previous?: ActivityPreviousPeriod
 }
 
 interface DayAttempt {
@@ -139,6 +168,84 @@ function fmtTime(iso: string): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
+// ============================================================
+// F-9b — comparaison période courante vs période précédente
+// ============================================================
+
+/** Phrase de synthèse adaptée au signe de l'écart de tentatives entre
+ *  la fenêtre courante et la fenêtre précédente (84 jours chacune). */
+function comparisonTakeaway(current: number, prev: number): string {
+  const diff = current - prev
+  if (diff > 0) {
+    return `Assiduité en hausse : +${diff} tentative${diff === 1 ? '' : 's'} par rapport aux 12 semaines précédentes.`
+  }
+  if (diff < 0) {
+    return `Assiduité en baisse : −${-diff} tentative${diff === -1 ? '' : 's'} par rapport aux 12 semaines précédentes.`
+  }
+  return current === 0
+    ? 'Aucune tentative sur aucune des deux périodes — la série démarre avec vous.'
+    : 'Assiduité stable : autant de tentatives que sur les 12 semaines précédentes.'
+}
+
+/** Couleur du delta (hausse / baisse / stable) — motif emerald/red établi
+ *  dans tout le simulateur, muted pour l'égalité. */
+function deltaTone(diff: number): string {
+  if (diff > 0) return 'text-emerald-700 dark:text-emerald-400'
+  if (diff < 0) return 'text-red-700 dark:text-red-400'
+  return 'text-muted-foreground'
+}
+
+/** F-9b — ligne de métrique comparée « libellé : X vs Y (delta) » :
+ *  delta +N (emerald), −N (red), = (muted), chiffres tabular-nums. */
+function ComparisonRow({ label, current, previous }: { label: string; current: number; previous: number }) {
+  const diff = current - previous
+  const delta = diff > 0 ? `+${diff}` : diff < 0 ? `−${-diff}` : '='
+  return (
+    <p className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="tabular-nums">
+        <span className="font-medium text-foreground">{current}</span>
+        <span className="text-muted-foreground"> vs {previous}</span>
+        <span className={`ml-1.5 font-medium ${deltaTone(diff)}`}>({delta})</span>
+      </span>
+    </p>
+  )
+}
+
+// ============================================================
+// F-9c — export CSV de l'historique d'assiduité
+// ============================================================
+
+/** F-9c — constructeur pur du CSV (testable unitairement) : BOM UTF-8 pour
+ *  Excel, séparateur point-virgule (Excel-FR), en-tête « Date;Tentatives »,
+ *  une ligne par jour « YYYY-MM-DD;count », ligne de total en fin — fins de
+ *  ligne CRLF (RFC 4180). Aucune dépendance, aucun accès DOM. */
+export function buildActivityCsv(days: ActivityDay[]): string {
+  const lines: string[] = ['Date;Tentatives']
+  let total = 0
+  for (const day of days) {
+    lines.push(`${day.date};${day.count}`)
+    total += day.count
+  }
+  lines.push(`Total;${total}`)
+  return `\uFEFF${lines.join('\r\n')}\r\n`
+}
+
+/** F-9c — téléchargement silencieux (Blob + ancre éphémère, aucune toast) :
+ *  l'ancre est attachée au document le temps du clic puis retirée, et
+ *  l'URL d'objet est révoquée immédiatement après le déclenchement. */
+function downloadActivityCsv(days: ActivityDay[]) {
+  const blob = new Blob([buildActivityCsv(days)], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = `assiduite-${days.length}-jours.csv`
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
+}
+
 // Géométrie du viewBox (le SVG est responsive : w-full borné, h-auto)
 const CELL = 12
 const GAP = 3
@@ -154,8 +261,14 @@ export function ActivityHeatmap({
   todayCount,
   today,
   bestDay,
+  passed,
+  previous,
 }: ActivityHeatmapProps) {
   const [selected, setSelected] = useState<string | null>(null)
+  // F-9b — panneau de comparaison ouvert/fermé (les métriques comparées
+  // sont intégralement DÉRIVÉES des props : zéro effet, zéro état dérivé
+  // synchronisé — seul l'ouverture est un état local).
+  const [compareOpen, setCompareOpen] = useState(false)
   // F-8c — filtre par mode du panneau du jour, clé par date : le mode
   // effectif est DÉRIVÉ (dayFilter.date === selected ? mode : 'all'),
   // changer de journée retombe naturellement sur « Tous » sans le
@@ -315,6 +428,20 @@ export function ActivityHeatmap({
           <CalendarCheck className="size-3.5 text-primary" aria-hidden />
           jours actifs : <span className="font-medium tabular-nums text-foreground">{activeDays}</span>/{cells.length}
         </span>
+        {/* F-9c — export CSV de l'historique des 84 derniers jours :
+            téléchargement natif silencieux (aucune toast), masqué à l'impression. */}
+        <button
+          type="button"
+          onClick={() => downloadActivityCsv(days)}
+          disabled={days.length === 0}
+          aria-disabled={days.length === 0}
+          title="Exporter l’historique des 84 derniers jours en CSV"
+          aria-label="Exporter l’historique des 84 derniers jours en CSV"
+          className="no-print flex items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1 transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <FileDown className="size-3.5 text-primary" aria-hidden />
+          Exporter CSV
+        </button>
       </div>
 
       {/* Heatmap — viewBox compact, largeur bornée, défilement horizontal en dessous du minimum */}
@@ -456,6 +583,52 @@ export function ActivityHeatmap({
           ))}
         </ul>
       </div>
+
+      {/* F-9b — comparaison avec la période précédente (84 jours avant la
+          fenêtre courante) : entièrement masquée quand la prop « previous »
+          est absente (payload en cache antérieur — dégradation gracieuse).
+          Le bouton est masqué à l'impression, le panneau ouvert s'imprime. */}
+      {previous ? (
+        <div>
+          <button
+            type="button"
+            onClick={() => setCompareOpen((open) => !open)}
+            aria-expanded={compareOpen}
+            aria-controls={compareOpen ? 'activite-comparaison' : undefined}
+            className="no-print flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+          >
+            <ChevronRight
+              className={`size-3.5 transition-transform duration-150 ${compareOpen ? 'rotate-90' : ''}`}
+              aria-hidden
+            />
+            vs période précédente
+          </button>
+          {compareOpen ? (
+            <div
+              id="activite-comparaison"
+              role="region"
+              aria-label="Comparaison de l’assiduité avec la période précédente (fenêtre courante contre 84 jours précédents)"
+              className="panel-enter rounded-lg border bg-muted/20 p-3 text-xs"
+            >
+              <p className="text-[11px] text-muted-foreground">
+                {cells.length} derniers jours vs {cells.length} jours précédents :
+              </p>
+              <div className="mt-1.5 space-y-1.5">
+                <ComparisonRow label="Tentatives" current={total} previous={previous.total} />
+                <ComparisonRow label="Jours actifs" current={activeDays} previous={previous.activeDays} />
+                {/* Réussites : ligne omise si l'un des deux compteurs est absent
+                    (payload partiel — dégradation gracieuse) */}
+                {typeof passed === 'number' && typeof previous.passed === 'number' ? (
+                  <ComparisonRow label="Réussites" current={passed} previous={previous.passed} />
+                ) : null}
+              </div>
+              <p className={`mt-2 text-[11px] leading-relaxed font-medium ${deltaTone(total - previous.total)}`}>
+                {comparisonTakeaway(total, previous.total)}
+              </p>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Détail des tentatives de la journée sélectionnée */}
       {selected ? (

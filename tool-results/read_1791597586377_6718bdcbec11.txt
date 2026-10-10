@@ -1,0 +1,587 @@
+     1→'use client'
+     2→
+     3→import { useMemo, useState } from 'react'
+     4→import { useQuery } from '@tanstack/react-query'
+     5→import { Badge } from '@/components/ui/badge'
+     6→import { Button } from '@/components/ui/button'
+     7→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+     8→import { Input } from '@/components/ui/input'
+     9→import { Label } from '@/components/ui/label'
+    10→import { ScrollArea } from '@/components/ui/scroll-area'
+    11→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+    12→import { Separator } from '@/components/ui/separator'
+    13→import { EmptyState } from '@/components/simulator/shared/ui-bits'
+    14→import { fmtEUR } from '@/lib/engine/format'
+    15→import { useWorksheet } from '@/components/simulator/audit/worksheet-hooks'
+    16→import type { SampleItemState, SamplingWorksheet } from '@/components/simulator/audit/worksheet-hooks'
+    17→import {
+    18→  extrapolate,
+    19→  selectSample,
+    20→  suggestedMusSize,
+    21→  verdictAgainstThresholds,
+    22→  type ConfidenceLevel,
+    23→  type PopulationItem,
+    24→  type SamplingMethod,
+    25→  type TestResult,
+    26→} from '@/lib/engine/sampling'
+    27→import { Crosshair, Dices, FlaskConical, Info, Save, ShieldAlert, ShieldCheck, TriangleAlert } from 'lucide-react'
+    28→
+    29→// ============================================================
+    30→// OUTIL D'ÉCHANTILLONNAGE & EXTRAPOLATION STATISTIQUE (NEP 530)
+    31→// Population réelle : factures du journal des ventes (VTE) du
+    32→// dossier NOVATECH. Trois méthodes de sélection (MUS / aléatoire
+    33→// simple / systématique), PRNG déterministe (graine affichée),
+    34→// strate des valeurs élevées testée à 100 %, extrapolation de
+    35→// l'erreur (borne de Stringer pour MUS, estimation par la moyenne
+    36→// pour les autres) et verdict comparé aux seuils de la mission.
+    37→// ============================================================
+    38→
+    39→const METHODS: { value: SamplingMethod; label: string; hint: string }[] = [
+    40→  {
+    41→    value: 'mus',
+    42→    label: 'Unités monétaires (MUS)',
+    43→    hint: 'Probabilité de tirage proportionnelle au montant : les factures lourdes sortent plus souvent — méthode privilégiée quand on cherche des surestimations.',
+    44→  },
+    45→  {
+    46→    value: 'random',
+    47→    label: 'Aléatoire simple',
+    48→    hint: 'Chaque facture a la même probabilité d’être tirée (sans remise). Extrapolation par la moyenne (MPU).',
+    49→  },
+    50→  {
+    51→    value: 'systematic',
+    52→    label: 'Systématique',
+    53→    hint: 'Un item tous les N/n, départ aléatoire. Pratique sur une population triée, mais sensible aux régularités périodiques.',
+    54→  },
+    55→]
+    56→
+    57→const CONFIDENCES: { value: string; label: string; z: string }[] = [
+    58→  { value: '0.9', label: '90 %', z: 'z = 1,645' },
+    59→  { value: '0.95', label: '95 %', z: 'z = 1,96' },
+    60→]
+    61→
+    62→interface SalesEntry {
+    63→  id: string
+    64→  pieceRef: string
+    65→  date: string
+    66→  label: string
+    67→  lines: { accountCode: string; debit: number; credit: number }[]
+    68→}
+    69→
+    70→function itemBook(e: SalesEntry): number {
+    71→  const deb411 = e.lines.filter((l) => l.accountCode.startsWith('411')).reduce((s, l) => s + l.debit, 0)
+    72→  if (deb411 > 0) return deb411
+    73→  return e.lines.filter((l) => l.accountCode.startsWith('70')).reduce((s, l) => s + l.credit, 0)
+    74→}
+    75→
+    76→const toState = (it: PopulationItem & { date?: string; label?: string }): SampleItemState => ({
+    77→  ref: it.ref,
+    78→  book: it.book,
+    79→  status: 'PENDING',
+    80→  error: 0,
+    81→})
+    82→
+    83→export function SamplingTool() {
+    84→  const { ws, save } = useWorksheet()
+    85→
+    86→  // ---- Population réelle : journal des ventes ----
+    87→  const sales = useQuery<{ entries: SalesEntry[]; total: number }>({
+    88→    queryKey: ['sales-population-full'],
+    89→    queryFn: async () => {
+    90→      const res = await fetch('/api/entries?journal=VTE&limit=300')
+    91→      if (!res.ok) throw new Error('Erreur')
+    92→      return res.json()
+    93→    },
+    94→  })
+    95→
+    96→  const population = useMemo<PopulationItem[]>(() => {
+    97→    const all = (sales.data?.entries ?? []).map((e) => ({
+    98→      ref: e.pieceRef,
+    99→      book: itemBook(e),
+   100→      label: e.label,
+   101→      date: e.date,
+   102→    }))
+   103→    // La population monétaire exclut avoirs et opérations diverses (valeur ≤ 0)
+   104→    return all.filter((it) => it.book > 0)
+   105→  }, [sales.data])
+   106→
+   107→  // ---- Seuils de la mission (feuille « Seuils » si sauvegardée, sinon défaut NEP 320) ----
+   108→  const materiality = ws.data?.worksheet.materiality
+   109→  const thresholds = useMemo(
+   110→    () =>
+   111→      materiality
+   112→        ? { signification: materiality.seuil, planification: materiality.planification, remontee: materiality.remontee, saved: true }
+   113→        : {
+   114→            signification: 44071.13,
+   115→            planification: 28646.23,
+   116→            remontee: 2203.56,
+   117→            saved: false,
+   118→          },
+   119→    [materiality],
+   120→  )
+   121→
+   122→  // ---- Paramètres de sondage ----
+   123→  const savedSampling: SamplingWorksheet | undefined = ws.data?.worksheet.sampling
+   124→  const [method, setMethod] = useState<SamplingMethod>(savedSampling?.method ?? 'mus')
+   125→  const [confidence, setConfidence] = useState<ConfidenceLevel>(savedSampling?.confidence ?? 0.95)
+   126→  const [seedStr, setSeedStr] = useState(String(savedSampling?.seed ?? 2024))
+   127→  const [nStr, setNStr] = useState(String(savedSampling?.taille ?? 25))
+   128→  const [hvStr, setHvStr] = useState('20000')
+   129→  // Overrides locaux (null = reprise de la feuille sauvegardée, dérivée
+   130→  // des données — pas d'effet de synchronisation nécessaire)
+   131→  const [sampleOverride, setSampleOverride] = useState<TestResult[] | null>(null)
+   132→  const [hvOverride, setHvOverride] = useState<TestResult[] | null>(null)
+   133→
+   134→  // Échantillon restauré depuis la feuille (format complet, ou anciennes
+   135→  // références seules converties en items « à tester » dès que la
+   136→  // population est chargée)
+   137→  const savedSample = useMemo<TestResult[]>(() => {
+   138→    if (!savedSampling) return []
+   139→    if (savedSampling.items?.length) return savedSampling.items
+   140→    if (!sales.isSuccess) return []
+   141→    const byRef = new Map(population.map((p) => [p.ref, p]))
+   142→    return (savedSampling.refs ?? [])
+   143→      .map((ref) => byRef.get(ref))
+   144→      .filter((p): p is PopulationItem => Boolean(p))
+   145→      .map((p) => ({ ref: p.ref, book: p.book, status: 'PENDING' as const, error: 0 }))
+   146→  }, [savedSampling, sales.isSuccess, population])
+   147→
+   148→  const sampleItems = sampleOverride ?? savedSample
+   149→  const hvItems = hvOverride ?? savedSampling?.highValue ?? []
+   150→
+   151→  const seed = Math.abs(Number(seedStr.replace(/[^0-9]/g, '')) || 2024)
+   152→  const n = Math.max(1, Math.min(100, Number(nStr.replace(/[^0-9]/g, '')) || 25))
+   153→  const hvThreshold = Math.max(0, Number(hvStr.replace(/[^0-9]/g, '')) || 0)
+   154→
+   155→  // ---- Strates et population sondée ----
+   156→  const hvPop = useMemo(() => population.filter((p) => p.book >= hvThreshold && hvThreshold > 0), [population, hvThreshold])
+   157→  const samplingPop = useMemo(
+   158→    () => (hvThreshold > 0 ? population.filter((p) => p.book < hvThreshold) : population),
+   159→    [population, hvThreshold],
+   160→  )
+   161→  const samplingValue = samplingPop.reduce((s, p) => s + p.book, 0)
+   162→  const interval = samplingPop.length ? samplingValue / Math.max(1, sampleItems.length || n) : 0
+   163→
+   164→  const generate = () => {
+   165→    const sel = selectSample(method, samplingPop, n, seed)
+   166→    const byRef = new Map(samplingPop.map((p) => [p.ref, p]))
+   167→    setSampleOverride(sel.refs.map((ref) => toState(byRef.get(ref)!)).filter(Boolean))
+   168→    setHvOverride(hvPop.map((p) => ({ ref: p.ref, book: p.book, status: 'PENDING' as const, error: 0 })))
+   169→  }
+   170→
+   171→  const updateItem = (ref: string, patch: Partial<TestResult>, isHv = false) => {
+   172→    const setter = isHv ? setHvOverride : setSampleOverride
+   173→    const base = isHv ? hvItems : sampleItems
+   174→    setter(base.map((it) => (it.ref === ref ? { ...it, ...patch } : it)))
+   175→  }
+   176→
+   177→  // ---- Extrapolation ----
+   178→  const extrap = useMemo(
+   179→    () =>
+   180→      extrapolate({
+   181→        method,
+   182→        confidence,
+   183→        sample: sampleItems,
+   184→        populationValue: samplingValue,
+   185→        populationCount: samplingPop.length,
+   186→        highValueError: hvItems.filter((i) => i.status === 'ERROR').reduce((s, i) => s + i.error, 0),
+   187→      }),
+   188→    [method, confidence, sampleItems, samplingValue, samplingPop.length, hvItems],
+   189→  )
+   190→  const hvErrorCount = hvItems.filter((i) => i.status === 'ERROR').length
+   191→  const verdict = verdictAgainstThresholds(extrap.uel, extrap.projectedTotal, thresholds, extrap.errorCount + hvErrorCount)
+   192→  const testedCount = sampleItems.filter((i) => i.status !== 'PENDING').length + hvItems.filter((i) => i.status !== 'PENDING').length
+   193→  const totalCount = sampleItems.length + hvItems.length
+   194→  const suggestedN = useMemo(
+   195→    () => (samplingPop.length ? suggestedMusSize(samplingValue, thresholds.planification, confidence) : 0),
+   196→    [samplingPop.length, samplingValue, thresholds.planification, confidence],
+   197→  )
+   198→
+   199→  const saveSampling = () => {
+   200→    const payload: SamplingWorksheet = {
+   201→      population: samplingPop.length,
+   202→      taille: sampleItems.length,
+   203→      refs: sampleItems.map((i) => i.ref),
+   204→      method,
+   205→      seed,
+   206→      confidence,
+   207→      items: sampleItems,
+   208→      highValue: hvItems,
+   209→      computed: {
+   210→        interval,
+   211→        projected: extrap.projectedTotal,
+   212→        precision: extrap.precision,
+   213→        uel: extrap.uel,
+   214→        verdict: verdict.verdict,
+   215→      },
+   216→    }
+   217→    save.mutate({ section: 'sampling', data: payload })
+   218→  }
+   219→
+   220→  if (sales.isLoading) {
+   221→    return (
+   222→      <Card>
+   223→        <CardContent className="py-10 text-center text-sm text-muted-foreground">Chargement de la population des ventes…</CardContent>
+   224→      </Card>
+   225→    )
+   226→  }
+   227→
+   228→  const methodHint = METHODS.find((m) => m.value === method)?.hint
+   229→
+   230→  return (
+   231→    <Card className="print-avoid-break">
+   232→      <CardHeader>
+   233→        <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
+   234→          <FlaskConical className="size-4 text-primary" />
+   235→          Échantillonnage & extrapolation statistique — cycle ventes (NEP 530)
+   236→          <Badge variant="outline" className="font-mono text-[10px]">
+   237→            {population.length} factures
+   238→          </Badge>
+   239→        </CardTitle>
+   240→      </CardHeader>
+   241→      <CardContent className="space-y-4">
+   242→        {/* ---------- Paramètres ---------- */}
+   243→        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+   244→          <div className="space-y-1">
+   245→            <Label className="text-xs">Méthode de sélection</Label>
+   246→            <Select value={method} onValueChange={(v) => setMethod(v as SamplingMethod)}>
+   247→              <SelectTrigger aria-label="Méthode de sélection"><SelectValue /></SelectTrigger>
+   248→              <SelectContent>
+   249→                {METHODS.map((m) => (
+   250→                  <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+   251→                ))}
+   252→              </SelectContent>
+   253→            </Select>
+   254→          </div>
+   255→          <div className="space-y-1">
+   256→            <Label className="text-xs">Confiance</Label>
+   257→            <Select value={String(confidence)} onValueChange={(v) => setConfidence(Number(v) as ConfidenceLevel)}>
+   258→              <SelectTrigger aria-label="Niveau de confiance"><SelectValue /></SelectTrigger>
+   259→              <SelectContent>
+   260→                {CONFIDENCES.map((c) => (
+   261→                  <SelectItem key={c.value} value={c.value}>{c.label} · {c.z}</SelectItem>
+   262→                ))}
+   263→              </SelectContent>
+   264→            </Select>
+   265→          </div>
+   266→          <div className="space-y-1">
+   267→            <Label className="text-xs">Taille (n)</Label>
+   268→            <Input value={nStr} onChange={(e) => setNStr(e.target.value)} inputMode="numeric" aria-label="Taille d'échantillon" />
+   269→          </div>
+   270→          <div className="space-y-1">
+   271→            <Label className="text-xs">Graine (reproductible)</Label>
+   272→            <div className="flex gap-1">
+   273→              <Input value={seedStr} onChange={(e) => setSeedStr(e.target.value)} inputMode="numeric" aria-label="Graine du tirage" />
+   274→              <Button
+   275→                type="button"
+   276→                variant="outline"
+   277→                size="icon"
+   278→                aria-label="Graine aléatoire"
+   279→                title="Tirer une graine aléatoire"
+   280→                onClick={() => setSeedStr(String(1000 + Math.floor(Math.random() * 9000)))}
+   281→              >
+   282→                <Dices className="size-4" />
+   283→              </Button>
+   284→            </div>
+   285→          </div>
+   286→          <div className="space-y-1">
+   287→            <Label className="text-xs">Strate exhaustive (≥)</Label>
+   288→            <Input value={hvStr} onChange={(e) => setHvStr(e.target.value)} inputMode="numeric" aria-label="Seuil de stratification" />
+   289→          </div>
+   290→        </div>
+   291→        <p className="text-xs leading-relaxed text-muted-foreground">
+   292→          {methodHint} Les valeurs ≥ au seuil de stratification sont testées à 100 % (non extrapolées) ; les avoirs et
+   293→          opérations diverses (valeur ≤ 0) sont exclus de la population monétaire. Seuils de comparaison :{' '}
+   294→          {thresholds.saved ? 'feuille « Seuils » sauvegardée' : 'valeurs par défaut (feuille « Seuils » non sauvegardée)'}.
+   295→        </p>
+   296→        <div className="flex flex-wrap items-center gap-2">
+   297→          <Button size="sm" onClick={generate} disabled={sales.isLoading || samplingPop.length === 0} className="gap-1.5">
+   298→            <Crosshair className="size-3.5" /> Générer l’échantillon
+   299→          </Button>
+   300→          {samplingPop.length > 0 ? (
+   301→            <button
+   302→              type="button"
+   303→              className="inline-flex items-center gap-1.5 rounded-md border border-dashed px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+   304→              onClick={() => setNStr(String(suggestedN))}
+   305→              title="Applique la taille d'échantillon MUS classique : n = V × P(0,γ) / seuil de planification"
+   306→            >
+   307→              Taille suggérée : <span className="font-semibold tabular-nums text-foreground">{suggestedN}</span> items
+   308→              <span className="text-[10px]">(appliquer)</span>
+   309→            </button>
+   310→          ) : null}
+   311→          {sampleItems.length > 0 ? (
+   312→            <Badge variant="secondary" className="tabular-nums">
+   313→              {testedCount}/{totalCount} items testés
+   314→            </Badge>
+   315→          ) : null}
+   316→        </div>
+   317→
+   318→        {/* ---------- Résumé de population ---------- */}
+   319→        {population.length > 0 ? (
+   320→          <div className="grid grid-cols-2 gap-2 rounded-lg border bg-muted/30 p-3 text-xs sm:grid-cols-5">
+   321→            <div>
+   322→              <p className="text-muted-foreground">Population</p>
+   323→              <p className="tabular-nums font-semibold">{samplingPop.length + hvPop.length} factures</p>
+   324→            </div>
+   325→            <div>
+   326→              <p className="text-muted-foreground">Valeur totale</p>
+   327→              <p className="tabular-nums font-semibold">{fmtEUR(samplingValue + hvPop.reduce((s, p) => s + p.book, 0))}</p>
+   328→            </div>
+   329→            <div>
+   330→              <p className="text-muted-foreground">Strate exhaustive</p>
+   331→              <p className="tabular-nums font-semibold">{hvPop.length} · {fmtEUR(hvPop.reduce((s, p) => s + p.book, 0))}</p>
+   332→            </div>
+   333→            <div>
+   334→              <p className="text-muted-foreground">Population sondée</p>
+   335→              <p className="tabular-nums font-semibold">{samplingPop.length} · {fmtEUR(samplingValue)}</p>
+   336→            </div>
+   337→            <div>
+   338→              <p className="text-muted-foreground">Intervalle J = V/n</p>
+   339→              <p className="tabular-nums font-semibold">{sampleItems.length ? fmtEUR(interval) : '—'}</p>
+   340→            </div>
+   341→          </div>
+   342→        ) : null}
+   343→
+   344→        {/* ---------- Strate exhaustive ---------- */}
+   345→        {hvItems.length > 0 ? (
+   346→          <div className="space-y-2">
+   347→            <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+   348→              Strate des valeurs élevées — examen exhaustif
+   349→              <Badge variant="outline" className="normal-case">{hvItems.length} items</Badge>
+   350→            </h4>
+   351→            <ScrollArea className="print-expand max-h-56 rounded-md border">
+   352→              <table className="table-sticky w-full text-xs">
+   353→                <thead className="bg-muted">
+   354→                  <tr className="text-left uppercase text-muted-foreground">
+   355→                    <th className="p-2">Pièce</th>
+   356→                    <th className="p-2 text-right">Valeur</th>
+   357→                    <th className="p-2">Test</th>
+   358→                    <th className="p-2 text-right">Erreur</th>
+   359→                  </tr>
+   360→                </thead>
+   361→                <tbody>
+   362→                  {hvItems.map((it) => (
+   363→                    <ItemRow key={it.ref} it={it} onUpdate={(patch) => updateItem(it.ref, patch, true)} />
+   364→                  ))}
+   365→                </tbody>
+   366→              </table>
+   367→            </ScrollArea>
+   368→          </div>
+   369→        ) : null}
+   370→
+   371→        {/* ---------- Échantillon ---------- */}
+   372→        {sampleItems.length === 0 ? (
+   373→          <EmptyState
+   374→            icon={<Crosshair className="size-8" />}
+   375→            title="Aucun échantillon généré"
+   376→            description="Choisissez une méthode, une taille et une graine, puis générez : le tirage s’effectue réellement dans les factures de ventes du dossier. Saisissez ensuite vos résultats de test (conforme / anomalie + montant) pour obtenir l’extrapolation statistique."
+   377→          />
+   378→        ) : (
+   379→          <div className="space-y-2">
+   380→            <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+   381→              Échantillon sondé
+   382→              <Badge variant="outline" className="normal-case">{sampleItems.length} items</Badge>
+   383→            </h4>
+   384→            <ScrollArea className="print-expand max-h-80 rounded-md border">
+   385→              <table className="table-sticky w-full text-xs">
+   386→                <thead className="bg-muted">
+   387→                  <tr className="text-left uppercase text-muted-foreground">
+   388→                    <th className="p-2">Pièce</th>
+   389→                    <th className="p-2 text-right">Valeur</th>
+   390→                    <th className="p-2">Test</th>
+   391→                    <th className="p-2 text-right">Erreur</th>
+   392→                    {method === 'mus' ? <th className="p-2 text-right">Tainting</th> : null}
+   393→                  </tr>
+   394→                </thead>
+   395→                <tbody>
+   396→                  {sampleItems.map((it) => (
+   397→                    <ItemRow key={it.ref} it={it} showTainting={method === 'mus'} onUpdate={(patch) => updateItem(it.ref, patch)} />
+   398→                  ))}
+   399→                </tbody>
+   400→              </table>
+   401→            </ScrollArea>
+   402→          </div>
+   403→        )}
+   404→
+   405→        {/* ---------- Extrapolation ---------- */}
+   406→        {sampleItems.length > 0 ? (
+   407→          <div className="space-y-3 rounded-lg border p-3">
+   408→            <div className="flex flex-wrap items-center gap-2">
+   409→              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Extrapolation statistique</h4>
+   410→              <Badge variant="outline" className="font-mono text-[10px]">
+   411→                {method === 'mus' ? 'Stringer (MUS)' : 'MPU ± précision'} · {confidence === 0.95 ? '95 %' : '90 %'}
+   412→              </Badge>
+   413→            </div>
+   414→            <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+   415→              <div className="rounded-md border p-2">
+   416→                <p className="text-muted-foreground">Erreur projetée</p>
+   417→                <p className="tabular-nums text-sm font-semibold text-amber-700 dark:text-amber-400">{fmtEUR(extrap.projectedTotal)}</p>
+   418→                {extrap.highValueError > 0 ? (
+   419→                  <p className="text-[10px] text-muted-foreground">dont {fmtEUR(extrap.highValueError)} à 100 % (strate exhaustive)</p>
+   420→                ) : null}
+   421→              </div>
+   422→              <div className="rounded-md border p-2">
+   423→                <p className="text-muted-foreground">Précision statistique</p>
+   424→                <p className="tabular-nums text-sm font-semibold">{fmtEUR(extrap.precision)}</p>
+   425→              </div>
+   426→              <div className="rounded-md border p-2">
+   427→                <p className="text-muted-foreground">Limite sup. (UEL)</p>
+   428→                <p className="tabular-nums text-sm font-semibold">{fmtEUR(extrap.uel)}</p>
+   429→              </div>
+   430→              <div className="rounded-md border p-2">
+   431→                <p className="text-muted-foreground">Items fautifs</p>
+   432→                <p className="tabular-nums text-sm font-semibold">
+   433→                  {extrap.errorCount + hvErrorCount}/{totalCount} ({(((sampleItems.length + hvItems.length) ? (extrap.errorCount + hvErrorCount) / (sampleItems.length + hvItems.length) : 0) * 100).toFixed(0)} %)
+   434→                </p>
+   435→                {hvErrorCount > 0 ? (
+   436→                  <p className="text-[10px] text-muted-foreground">dont {hvErrorCount} en strate exhaustive</p>
+   437→                ) : null}
+   438→              </div>
+   439→            </div>
+   440→
+   441→            {/* Échelle de comparaison aux seuils */}
+   442→            <ThresholdScale
+   443→              projected={extrap.projectedTotal}
+   444→              uel={extrap.uel}
+   445→              thresholds={thresholds}
+   446→            />
+   447→
+   448→            <div
+   449→              className={`rounded-md border p-3 text-xs leading-relaxed ${
+   450→                verdict.verdict === 'ACCEPT'
+   451→                  ? 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200'
+   452→                  : verdict.verdict === 'ALERT'
+   453→                    ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200'
+   454→                    : 'border-red-300 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-200'
+   455→              }`}
+   456→              role="status"
+   457→            >
+   458→              <p className="flex items-center gap-2 font-semibold">
+   459→                {verdict.verdict === 'ACCEPT' ? <ShieldCheck className="size-4" /> : verdict.verdict === 'ALERT' ? <TriangleAlert className="size-4" /> : <ShieldAlert className="size-4" />}
+   460→                {verdict.label}
+   461→              </p>
+   462→              <p className="mt-1">{verdict.detail}</p>
+   463→              {method !== 'mus' ? (
+   464→                <p className="mt-1 flex gap-1.5 text-[11px] opacity-80">
+   465→                  <Info className="mt-0.5 size-3 shrink-0" />
+   466→                  Rappel méthodologique : l’estimation par la moyenne suppose une dispersion homogène des erreurs ; la
+   467→                  sélection systématique est souvent traitée avec les statistiques MPU — documentez ce choix.
+   468→                </p>
+   469→              ) : null}
+   470→            </div>
+   471→
+   472→            <Button size="sm" variant="outline" className="gap-1.5" onClick={saveSampling} disabled={save.isPending}>
+   473→              <Save className="size-3.5" /> Sauvegarder la feuille d’échantillonnage
+   474→            </Button>
+   475→            <Separator className="print:hidden" />
+   476→            <p className="text-[11px] leading-relaxed text-muted-foreground">
+   477→              Formules : MUS — J = V/n ; erreur projetée = Σ(tainting × J) ; UEL = J × [P(0) + Σ(P(k) − P(k−1)) × t₍ₖ₎]
+   478→              (borne de Stringer, facteurs de Poisson). MPU — projeté = moyenne des erreurs × N ; précision = z × s/√n × N.
+   479→              Les erreurs de la strate exhaustive s’ajoutent à 100 %. Graine {seed} : le tirage est reproductible.
+   480→            </p>
+   481→          </div>
+   482→        ) : null}
+   483→      </CardContent>
+   484→    </Card>
+   485→  )
+   486→}
+   487→
+   488→// ---------- Ligne de résultat de test ----------
+   489→
+   490→function ItemRow({
+   491→  it,
+   492→  showTainting = false,
+   493→  onUpdate,
+   494→}: {
+   495→  it: TestResult
+   496→  showTainting?: boolean
+   497→  onUpdate: (patch: Partial<TestResult>) => void
+   498→}) {
+   499→  const tainting = it.book > 0 ? Math.min(1, Math.max(0, it.error) / it.book) : 0
+   500→  return (
+   501→    <tr className={`border-t ${it.status === 'ERROR' ? 'bg-red-50/60 dark:bg-red-950/30' : it.status === 'OK' ? '' : 'opacity-80'}`}>
+   502→      <td className="p-1.5 font-mono">{it.ref}</td>
+   503→      <td className="p-1.5 text-right tabular-nums">{fmtEUR(it.book)}</td>
+   504→      <td className="p-1.5">
+   505→        <Select value={it.status} onValueChange={(v) => onUpdate({ status: v as TestResult['status'], error: v === 'OK' ? 0 : it.error })}>
+   506→          <SelectTrigger className="h-7 w-32 text-xs" aria-label={`Résultat du test ${it.ref}`}>
+   507→            <SelectValue />
+   508→          </SelectTrigger>
+   509→          <SelectContent>
+   510→            <SelectItem value="PENDING">À tester</SelectItem>
+   511→            <SelectItem value="OK">Conforme</SelectItem>
+   512→            <SelectItem value="ERROR">Anomalie</SelectItem>
+   513→          </SelectContent>
+   514→        </Select>
+   515→      </td>
+   516→      <td className="p-1.5 text-right">
+   517→        {it.status === 'ERROR' ? (
+   518→          <Input
+   519→            className="h-7 w-28 text-right text-xs tabular-nums"
+   520→            value={String(it.error)}
+   521→            inputMode="decimal"
+   522→            aria-label={`Montant de l'erreur ${it.ref}`}
+   523→            onChange={(e) => {
+   524→              const v = Number(e.target.value.replace(',', '.').replace(/[^0-9.]/g, ''))
+   525→              onUpdate({ error: Number.isFinite(v) ? v : 0 })
+   526→            }}
+   527→          />
+   528→        ) : (
+   529→          <span className="text-muted-foreground">—</span>
+   530→        )}
+   531→      </td>
+   532→      {showTainting ? (
+   533→        <td className="p-1.5 text-right tabular-nums text-muted-foreground">
+   534→          {it.status === 'ERROR' ? `${(tainting * 100).toFixed(0)} %` : '—'}
+   535→        </td>
+   536→      ) : null}
+   537→    </tr>
+   538→  )
+   539→}
+   540→
+   541→// ---------- Échelle visuelle de comparaison aux seuils ----------
+   542→
+   543→function ThresholdScale({
+   544→  projected,
+   545→  uel,
+   546→  thresholds,
+   547→}: {
+   548→  projected: number
+   549→  uel: number
+   550→  thresholds: { signification: number; planification: number; remontee: number }
+   551→}) {
+   552→  const max = Math.max(thresholds.signification * 1.15, uel * 1.05, 1)
+   553→  const pct = (v: number) => `${Math.min(100, (v / max) * 100)}%`
+   554→  const markers = [
+   555→    { v: thresholds.remontee, label: 'Remontée', cls: 'bg-muted-foreground/70' },
+   556→    { v: thresholds.planification, label: 'Planification', cls: 'bg-amber-500' },
+   557→    { v: thresholds.signification, label: 'Signification', cls: 'bg-red-500' },
+   558→  ]
+   559→  return (
+   560→    <div className="space-y-1.5" role="img" aria-label={`Erreur projetée ${fmtEUR(projected)}, limite supérieure ${fmtEUR(uel)}, seuil de signification ${fmtEUR(thresholds.signification)}`}>
+   561→      <div className="relative h-7 overflow-visible rounded-md border bg-muted/40">
+   562→        {/* Barre d'erreur projetée */}
+   563→        <div className="absolute inset-y-1 left-0 rounded-sm bg-amber-500/80 transition-all duration-500" style={{ width: pct(projected) }} />
+   564→        {/* Marqueur UEL */}
+   565→        <div
+   566→          className="absolute -top-0.5 bottom-0.5 w-0.5 bg-foreground transition-all duration-500"
+   567→          style={{ left: pct(uel) }}
+   568→          title={`UEL : ${fmtEUR(uel)}`}
+   569→        />
+   570→        {/* Marqueurs de seuils */}
+   571→        {markers.map((m) => (
+   572→          <div key={m.label} className={`absolute inset-y-0 w-0.5 ${m.cls}`} style={{ left: pct(m.v) }} title={`${m.label} : ${fmtEUR(m.v)}`} />
+   573→        ))}
+   574→      </div>
+   575→      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-muted-foreground">
+   576→        <span className="flex items-center gap-1"><span className="inline-block h-2 w-3 rounded-sm bg-amber-500/80" /> Erreur projetée {fmtEUR(projected)}</span>
+   577→        <span className="flex items-center gap-1"><span className="inline-block h-3 w-0.5 bg-foreground" /> UEL {fmtEUR(uel)}</span>
+   578→        {markers.map((m) => (
+   579→          <span key={m.label} className="flex items-center gap-1">
+   580→            <span className={`inline-block h-2.5 w-0.5 ${m.cls}`} /> {m.label} {fmtEUR(m.v)}
+   581→          </span>
+   582→        ))}
+   583→      </div>
+   584→    </div>
+   585→  )
+   586→}
+   587→

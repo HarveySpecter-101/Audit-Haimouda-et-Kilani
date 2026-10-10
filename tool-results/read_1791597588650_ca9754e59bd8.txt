@@ -1,0 +1,478 @@
+     1→import type { LessonBlock } from '@/lib/types'
+     2→
+     3→// ============================================================
+     4→// CENTRE DE CONNAISSANCES — données pédagogiques statiques
+     5→// Glossaire (72 termes), 12 fiches pratiques, références
+     6→// officielles (URLs réelles, contenu à vérifier), comparatif PCG/IFRS.
+     7→// Aucune solution d'exercice n'est exposée ici.
+     8→// ============================================================
+     9→
+    10→// ------------------------------------------------------------
+    11→// 1. GLOSSAIRE
+    12→// ------------------------------------------------------------
+    13→
+    14→export type GlossaryDomain = 'COMPTA' | 'AUDIT' | 'FISCAL' | 'TRANSVERSE'
+    15→
+    16→export interface GlossaryTerm {
+    17→  term: string
+    18→  definition: string
+    19→  domain: GlossaryDomain
+    20→}
+    21→
+    22→const G = (term: string, domain: GlossaryDomain, definition: string): GlossaryTerm => ({
+    23→  term,
+    24→  domain,
+    25→  definition,
+    26→})
+    27→
+    28→export const GLOSSARY: GlossaryTerm[] = [
+    29→  // ---------- Comptabilité générale ----------
+    30→  G('Actif', 'COMPTA', "Partie du bilan qui regroupe ce que l'entreprise possède et ce qu'on lui doit : immobilisations, stocks, créances clients, trésorerie. Au PCG, l'actif est présenté en valeurs brutes, amortissements et dépréciations (en moins) et nettes."),
+    31→  G('Passif', 'COMPTA', "Partie du bilan qui finance l'actif : capitaux propres (capital, réserves, report à nouveau, résultat) et dettes (emprunts, fournisseurs, fiscales et sociales). Total actif net = total passif, toujours."),
+    32→  G('Charge', 'COMPTA', "Opération qui appauvrit l'entreprise (achat consommé, loyer, salaire…) : comptes de la classe 6. Une charge de l'exercice diminue le résultat. À distinguer d'une immobilisation (classe 2), consommée sur plusieurs exercices via l'amortissement."),
+    33→  G('Produit', 'COMPTA', "Opération qui enrichit l'entreprise (vente, prestation, produit financier…) : comptes de la classe 7. Les produits de l'exercice augmentent le résultat."),
+    34→  G('Partie double', 'COMPTA', "Principe fondateur : toute opération s'enregistre dans au moins deux comptes, un au débit et un au crédit, pour un montant total identique. Garantit l'égalité Σ débits = Σ crédits et l'équilibre du bilan."),
+    35→  G('Journal', 'COMPTA', "Registre chronologique des écritures, découpé par nature (achats, ventes, banque, caisse, OD, paie, social). Chaque écriture y porte sa date, sa référence de pièce, son libellé et ses lignes débit/crédit."),
+    36→  G('Grand livre', 'COMPTA', "Ensemble des mouvements reclassés compte par compte : pour chaque compte, toutes ses lignes dans l'ordre chronologique avec solde progressif. C'est l'outil de justification d'un solde."),
+    37→  G('Balance', 'COMPTA', "Tableau récapitulatif de tous les comptes : soldes d'ouverture, mouvements de l'exercice, soldes de clôture (balance à 6 colonnes). Contrôle fondamental : totaux débits = totaux crédits sur chaque colonne."),
+    38→  G('Auxiliaire', 'COMPTA', "Compte de tiers individuel rattaché au compte général (411001 = client DELTACOM rattaché à 411000). La somme des soldes auxiliaires doit être égale au solde du compte général — c'est l'apurement."),
+    39→  G('Lettrage', 'COMPTA', "Rapprochement, dans un compte de tiers, des factures et de leurs règlements par apposition d'une même lettre. Le solde lettré est apuré ; ce qui reste en non-lettré constitue les reliquats à justifier."),
+    40→  G('Balance âgée', 'COMPTA', "Balance des comptes clients (ou fournisseurs) ventilée par ancienneté des factures non réglées (moins de 30 j, 30-60 j, plus de 60 j…). Outil clé du suivi du recouvrement et de la dépréciation des créances."),
+    41→  G('À-nouveaux', 'COMPTA', "Écriture d'ouverture du nouvel exercice reprenant les soldes de bilan de clôture N-1 (les comptes de gestion étant soldés par affectation du résultat). Base des soldes d'ouverture de la balance N."),
+    42→  G('Extourne', 'COMPTA', "Écriture inverse d'une écriture erronée ou d'une écriture de régularisation provisoire (ex. extourne d'une FNP au 01/01/N+1 lorsque la facture arrive). Contre-passation : on passe les mêmes lignes en sens inverse."),
+    43→  G('Doublon', 'COMPTA', "Anomalie de saisie : la même pièce (même référence, même tiers, même montant) est comptabilisée deux fois. Contrôle de base avant saisie : unicité de la référence de pièce dans le journal."),
+    44→  G('Avoir', 'COMPTA', "Document émis pour diminuer une facture : retour de marchandises, erreur, geste commercial. Comptabilisé en sens inverse d'une facture (401/609 pour un avoir fournisseur, 709/411 ou 411/701 pour un avoir client)."),
+    45→  G('Escompte', 'COMPTA', "Réduction financière accordée pour règlement anticipé. Conditionnel : constaté par provision (compte 6xxx/7xxx selon le sens) tant que le client n'a pas réglé ; définitif lors du règlement. Se distingue des RRR commerciaux."),
+    46→  G('RRR', 'COMPTA', "Rabais, remises et ristournes : réductions commerciales figurant ou non sur la facture initiale. Si elles n'apparaissent pas sur la facture, un avoir les constate via les comptes 609/709 — elles ne se comptabilisent jamais en charges/produits financiers."),
+    47→  G('Pièce justificative', 'COMPTA', "Document qui prouve l'opération : facture, relevé bancaire, bulletin de paie, contrat… Aucune écriture ne peut rester sans pièce : la demande de pièce manquante doit être formalisée et tracée (date, destinataire, relance)."),
+    48→  G('Amortissement', 'COMPTA', "Constatation comptable de la consommation des avantages économiques d'une immobilisation. Linéaire : base × taux × prorata (en jours ou mois depuis la mise en service). Dotation au débit du 6811, crédit du 28xx."),
+    49→  G('Dotation', 'COMPTA', "Charge calculée (non décaissée) de l'exercice : dotation aux amortissements (6811), aux dépréciations (6816/6817), aux provisions (6815). Leur recalcul est un travail de révision fondamental."),
+    50→  G('VNC', 'COMPTA', "Valeur nette comptable : valeur d'origine (brut) moins amortissements cumulés et dépréciations. Au bilan, les immobilisations sont présentées en brut, amortissements (négatif) et net."),
+    51→  G('Dépréciation', 'COMPTA', "Constatation d'une perte de valeur réversible : dépréciation des stocks (moins-value), des créances (douteux), d'actifs. Reprise possible si la valeur remonte. Diffère de l'amortissement (irréversible par nature) et de la provision (passif exigible probable)."),
+    52→  G('Provision', 'COMPTA', "Passif dont l'échéance ou le montant n'est pas certain : litige, garanties, gros entretien. Conditions : obligation à la clôture, sortie de ressources probable, montant estimable. Sans contrepartie d'actif."),
+    53→  G('Cut-off', 'TRANSVERSE', "Séparation des exercices : rattacher chaque charge et chaque produit au bon exercice. Contrôle par encadrement des dernières et premières opérations (livraisons, réceptions) autour de la clôture. Erreur classique des dossiers réels."),
+    54→  G('FNP', 'COMPTA', "Facture non parvenue : charge de N consommée dont la facture n'est pas arrivée à la clôture. Écriture : 6xx au débit, 408 au crédit ; extournée à l'ouverture de N+1 quand la facture est enregistrée."),
+    55→  G('FAE', 'COMPTA', "Facture à établir : produit de N (prestation réalisée) non encore facturé à la clôture. Écriture : 418 au débit, 7xx au crédit ; extournée lors de la facturation en N+1."),
+    56→  G('CCA', 'COMPTA', "Charges constatées d'avance : charge réglée ou enregistrée en N mais qui concerne N+1 (assurance, loyer d'avance). Écriture : 486 au débit, 6xx au crédit."),
+    57→  G('PCA', 'COMPTA', "Produits constatés d'avance : produit encaissé ou facturé en N qui concerne N+1 (abonnement facturé d'avance). Écriture : 7xx au débit, 487 au crédit."),
+    58→  G('Rapprochement bancaire', 'COMPTA', "Contrôle mensuel rapprochant le solde du compte 512 (comptabilité) du solde du relevé bancaire. Écarts normaux : chèques émis non encaissés, virements en transit. Écarts anormaux : frais, intérêts, erreurs — à comptabiliser."),
+    59→  G('Bilan', 'COMPTA', "État financier de synthèse présentant à une date donnée l'actif (emplois) et le passif (ressources). Présentation PCG en classes ordonnées, valeurs brutes/amortissements/nettes. Doit être strictement équilibré."),
+    60→  G('Compte de résultat', 'COMPTA', "État financier des produits et charges de l'exercice, par nature, aboutissant au résultat (produits − charges). Le résultat se retrouve au passif du bilan dans les capitaux propres — contrôle de cohérence fondamental."),
+    61→  G('Prorata temporis', 'COMPTA', "Répartition proportionnelle au temps : amortissement d'une immobilisation mise en service en cours d'année, loyer à cheval sur deux exercices. Usage systématique en cut-off et inventaire."),
+    62→  // ---------- Fiscal ----------
+    63→  G('TVA collectée', 'FISCAL', "TVA facturée aux clients sur les ventes : compte 44571 (ventes de biens). Elle constitue une dette envers l'État dès l'émission de la facture (TVA sur les débits) ou l'encaissement (TVA sur les encaissements)."),
+    64→  G('TVA déductible', 'FISCAL', "TVA payée sur les achats et charges nécessaires à l'exploitation : comptes 44562 (biens) et 44566 (services). Conditions : facture conforme mentionnant la TVA, lien avec l'exploitation, non exclue par la loi."),
+    65→  G('TVA à décaisser', 'FISCAL', "Différence TVA collectée − TVA déductible du mois (ou du trimestre) : montant à payer avec la déclaration. Si négative, crédit de TVA à reporter ou remboursement selon le régime."),
+    66→  G('CA3', 'FISCAL', "Déclaration mensuelle (ou trimestrielle) de TVA : formulaire CA3 déposé en principe le mois suivant la période. Le simulateur pédagogique retient une liquidation mensuelle au 20 ; la date réelle dépend du régime et de la modalité de télétransmission."),
+    67→  G('TVA sur les débits', 'FISCAL', "Fait générateur : exigibilité de la TVA à la facturation/livraison (régime par défaut pour les ventes de biens). S'oppose à la TVA sur les encaissements (obligatoire pour les prestations de services, sauf option pour les débits)."),
+    68→  G('IS', 'FISCAL', "Impôt sur les sociétés : assis sur le résultat fiscal (résultat comptable ± réintégrations/déductions). Calculé et comptabilisé à la clôture (695 / 444). Le taux applicable dépend des exercices et de la taille de l'entreprise — vérifier le taux en vigueur."),
+    69→  G('TVS', 'FISCAL', "Taxe sur les véhicules de société : due par les sociétés soumises à l'IS possédant des véhicules. Déclaration et paiement annuels ; assiette selon émissions de CO₂ et date de première mise en circulation."),
+    70→  G('URSSAF', 'FISCAL', "Organisme collecteur des cotisations sociales personnelles (santé, famille, retraite de base) et de laCSG-CRDS. Déclaration sociale nominative (DSN) et paiement mensuel, en principe le 15 du mois suivant (à vérifier selon la situation)."),
+    71→  G('Brut / net / charges patronales', 'FISCAL', "Salaire brut = rémunération avant cotisations ; net = brut − cotisations salariales ; charges patronales = cotisations payées par l'employeur en sus du brut. Comptabilisation : 641 (brut), 421 (net à payer), 425/43x (organismes) au crédit."),
+    72→  G('Liasse fiscale', 'FISCAL', "Ensemble des tableaux de la déclaration de résultats (résultat fiscal, TVA, IS…). Elle reflète les retraitements fiscal/comptable et accompagne le bilan et le compte de résultat."),
+    73→  // ---------- Audit ----------
+    74→  G('NEP', 'AUDIT', "Norme d'exercice professionnel : normes d'audit légal français homologuées, édictées par la CNCC (avec l'ANECS et le CSOEC). Elles encadrent chaque phase : acceptation (210), planification (300/315), seuils (320), risques (315), échantillonnage (530), confirmations (505), anomalies (450), rapport (700)…"),
+    75→  G('CAC', 'AUDIT', "Commissaire aux comptes : professionnel inscrit sur une liste d'aptitude, chargé de la mission de commissariat aux comptes (contrôle légal des comptes). Mission légale (code de commerce) avec une responsabilité propre, renouvelable avec rotation mandataire."),
+    76→  G('Assurance raisonnable', 'AUDIT', "Niveau d'assurance visé par l'audit : réduire à un niveau acceptable le risque que les comptes contiennent des anomalies significatives. Ce n'est ni une certitude absolue, ni une garantie de bonne santé — c'est une opinion motivée sur des éléments probants."),
+    77→  G('Scepticisme professionnel', 'AUDIT', "Attitude consistant à se garder de la confiance excessive dans les informations reçues : vérifier, recouper, challenger. Indispensable pour détecter les anomalies, notamment les indices de fraude."),
+    78→  G('Indépendance', 'AUDIT', "Absence de liens (financiers, familiaux, services) susceptibles de compromettre l'objectivité du CAC. Vérifiée à l'acceptation et tout au long de la mission ; les incompatibilités sont cadrées par le Code de déontologie."),
+    79→  G('Lettre de mission', 'AUDIT', "Document formalisant l'accord des parties sur la mission : objet, étendue, responsabilités respectives, honoraires, calendrier. Prévue par la NEP 210 ; à faire signer avant le début des travaux."),
+    80→  G('Lettre d\u2019affirmation', 'AUDIT', "Déclarations écrites de la direction obtenues à la finalisation : les comptes sont complets, les anomalies non corrigées ont été examinées, les événements ont été communiqués. Élément probant requis, mais jamais suffisant à lui seul."),
+    81→  G('Seuil de signification', 'AUDIT', "Montant au-delà duquel une anomalie, seule ou cumulée, peut influencer le jugement des utilisateurs des comptes. Usuellement adossé à des référentiels (CA, résultat, capitaux propres) — hypothèses à documenter, pas à recopier."),
+    82→  G('SAM', 'AUDIT', "Seuil d'anomalie minimale (ou seuil de remontée) : montant en dessous duquel une anomalie n'est pas remontée individuellement dans le tableau des anomalies. Inférieur au seuil de signification ; le cumul reste comparé au seuil."),
+    83→  G('Assertion', 'AUDIT', "Assertions de direction à tester : existence, exhaustivité, évaluation, rattachement (cut-off), présentation, droits et obligations, réalité. Chaque procédure d'audit vise au moins une assertion précise."),
+    84→  G('Walkthrough', 'AUDIT', "Test de cheminement : suivre une opération réelle de bout en bout dans le processus et le SI (commande → livraison → facture → encaissement) pour confirmer la compréhension du processus et évaluer la conception des contrôles."),
+    85→  G('Échantillonnage', 'AUDIT', "Sélection d'une fraction de la population (critères, méthode, taille documentés) pour conclure sur l'ensemble. En tests de détail : méthode par valeurs monétaires, statistique ou jugement — l'extrapolation doit être documentée (NEP 530)."),
+    86→  G('Confirmation externe', 'AUDIT', "Demande directe envoyée à un tiers (client, banque, avocat) et réponse retournée à l'auditeur. Confirmation positive directe privilégiée pour les soldes ; sans réponse, procédure alternative obligatoire (NEP 505)."),
+    87→  G('Élément probant', 'AUDIT', "Information recueillie par l'auditeur et suffisante/appropriée pour fonder son opinion : documents reçus de tiers, observations, recalculs, confirmations. Hiérarchie : élément externe > interne validé > interne simple."),
+    88→  G('Événements postérieurs', 'AUDIT', "Événements survenant entre la clôture et la date du rapport : ceux qui révèlent des conditions existant à la clôture entraînent un ajustement des comptes ; les autres donnent des paragraphes d'observation (NEP 560)."),
+    89→  G('Continuité d\u2019exploitation', 'AUDIT', "Hypothèse selon laquelle l'entité poursuivra son activité. Si des doutes sérieux existent (pertes récurrentes, capitaux propres négatifs, difficultés de trésorerie), l'auditeur documente son analyse (NEP 570) et peut insérer un paragraphe d'incertitude."),
+    90→  G('Opinion avec réserve', 'AUDIT', "Opinion certifiant les comptes à l'exception d'un ou plusieurs points (désaccord sur un montant, limitation de travaux). Le paragraphe de réserve précise l'incidence chiffrée quand elle est mesurable."),
+    91→  G('Impossibilité d\u2019exprimer une opinion', 'AUDIT', "Formulation retenue quand les limitations de travaux empêchent d'obtenir des éléments probants suffisants : l'auditeur ne certifie pas. Se distingue de l'opinion défavorable (éléments obtenus montrant des comptes erronés)."),
+    92→  G('Image fidèle', 'AUDIT', "Exigence des comptes annuels : ils doivent donner une image fidèle du patrimoine, de la situation financière et du résultat. Objectif de la certification délivrée par le CAC (L. 823-9 C. com. : réguliers, sincères, image fidèle)."),
+    93→  G('Régularité', 'AUDIT', "Conformité des comptes aux règles et procédures du PCG (et au droit comptable). Premier étage du contrôle ; la sincérité et l'image fidèle s'y ajoutent."),
+    94→  G('Sincérité', 'AUDIT', "Application de bonne foi des règles en fonction de la connaissance que les responsables ont de la réalité. Comptabilité sincère = ni minimisation ni surévaluation intentionnelle."),
+    95→  // ---------- Référentiels / organisation ----------
+    96→  G('PCG', 'COMPTA', "Plan comptable général : règlement comptable national fixant les comptes, la présentation des états financiers et les règles d'évaluation. Référentiel des comptes individuels français — à consulter sur le site de l'Autorité des normes comptables."),
+    97→  G('IFRS', 'COMPTA', "International Financial Reporting Standards : référentiel comptable international (normes IASB), applicable aux comptes consolidés des sociétés cotées européennes et à d'autres entités selon la réglementation. Logique différente du PCG (image économique prioritaire)."),
+    98→  G('Dossier permanent', 'TRANSVERSE', "Partie du dossier contenant les éléments stables de l'entité : historique, actionnariat, organisation, contrats de référence, comptes des années précédentes. Mis à jour chaque année — il nourrit la compréhension de l'entité."),
+    99→  G('Dossier annuel', 'TRANSVERSE', "Partie du dossier propre à un exercice : travaux de l'année, feuilles de travail, livrables, états financiers, rapports. Il est archivé et constitue la preuve des travaux réalisés."),
+   100→  G('Feuille de travail', 'AUDIT', "Document du dossier (papier ou informatique) retraçant un travail : objectif, source, tests, résultats, conclusion, signature du réalisateur et du réviseur. Sans feuille de travail documentée, un travail est réputé non fait."),
+   101→  G('Référence croisée', 'TRANSVERSE', "Système de renvois entre documents du dossier (marques d'audit, index) : de la balance vers les feuilles de détail, du programme de travail vers les résultats. Permet la revue de dossier et la piste d'audit."),
+   102→]
+   103→
+   104→// ------------------------------------------------------------
+   105→// 2. FICHES PRATIQUES
+   106→// ------------------------------------------------------------
+   107→
+   108→export interface PracticalSheet {
+   109→  id: string
+   110→  title: string
+   111→  category: GlossaryDomain
+   112→  blocks: LessonBlock[]
+   113→}
+   114→
+   115→const B = (b: LessonBlock): LessonBlock => b
+   116→
+   117→export const PRACTICAL_SHEETS: PracticalSheet[] = [
+   118→  {
+   119→    id: 'FICHE-01',
+   120→    title: 'Contrôler une facture avant saisie',
+   121→    category: 'COMPTA',
+   122→    blocks: [
+   123→      B({ kind: 'text', title: 'Objectif', text: "Garantir que chaque facture saisie est conforme, complète et enregistrée une seule fois. Le contrôle en amont évite 80 % des anomalies de révision (doublons, TVA erronée, imputations fausses)." }),
+   124→      B({ kind: 'list', title: 'Points de contrôle obligatoires', items: [
+   125→        'Identité de l\u2019émetteur et du destinataire (nom, adresse, SIREN, n° TVA)',
+   126→        'Numéro de facture unique et séquentiel côté émetteur',
+   127→        'Date de la facture et date de livraison/prestation (le cas échéant distinctes)',
+   128→        'Détail des lignes : quantités × prix unitaire HT, remises éventuelles',
+   129→        'Taux de TVA appliqué et sa justification (nature du bien/service)',
+   130→        'Total HT, TVA, TTC cohérents entre eux (recalcul)',
+   131→        'Mentions de pénalités de retard et conditions de règlement',
+   132→      ] }),
+   133→      B({ kind: 'table', title: 'Recalculs de cohérence', headers: ['Contrôle', 'Formule', 'Alerte si'], rows: [
+   134→        ['TVA', 'HT × taux annoncé', 'écart > 0,01 €'],
+   135→        ['TTC', 'HT + TVA', 'écart > 0,01 €'],
+   136→        ['Total ligne', 'quantité × PU − remises', 'écart > 0,01 €'],
+   137→        ['Unicité', 'référence de pièce non déjà saisie', 'doublon détecté'],
+   138→      ] }),
+   139→      B({ kind: 'warn', title: 'Vigilance', text: "Une facture sans mention de TVA alors que l'opération en comporte, un taux inhabituel (5,5 % sur du matériel, 20 % sur l'électricité) ou un montant arrondi suspect doivent déclencher une question avant saisie. Ne jamais « corriger » une facture soi-même : demander un avoir ou une facture rectificative." }),
+   140→      B({ kind: 'tip', title: 'Réflexe doublon', text: "Rechercher la référence de la pièce dans le journal cible avant toute saisie (recherche plein texte sur la référence). Le dossier NOVATECH contient volontairement des doublons pédagogiques : entraînez-vous à les repérer." }),
+   141→      B({ kind: 'example', title: 'Exemple (dossier NOVATECH)', text: "La facture FV-2024-0018 (DELTACOM SARL) : HT 14 329,49 €, TVA 20 % = 2 865,90 €, TTC 17 195,39 €. Recalcul : 14 329,49 × 0,20 = 2 865,898 arrondi à 2 865,90 ✔ — la facture est cohérente et peut être saisie." }),
+   142→    ],
+   143→  },
+   144→  {
+   145→    id: 'FICHE-02',
+   146→    title: 'Réaliser un rapprochement bancaire',
+   147→    category: 'COMPTA',
+   148→    blocks: [
+   149→      B({ kind: 'text', title: 'Objectif', text: "Justifier l'écart entre le solde comptable du compte 512 et le solde du relevé bancaire en fin de mois, et identifier les éléments non enregistrés en comptabilité." }),
+   150→      B({ kind: 'list', title: 'Méthode pas à pas', items: [
+   151→        'Pointer ligne à ligne relevé ↔ journal de banque (montant, date approximative, libellé)',
+   152→        'Isoler les lignes relevé sans écriture : frais bancaires, intérêts, virements reçus non saisis → à comptabiliser',
+   153→        'Isoler les écritures sans ligne relevé : chèques émis non encore encaissés, virements donnés en fin de mois → écarts normaux « en circulation »',
+   154→        'Construire l\u2019état : solde 512 fin de mois + éléments en circulation − charges non enregistrées + produits non enregistrés = solde relevé',
+   155→        'Analyser tout écart résiduel : c\u2019est là que se cachent les anomalies (doublons de règlement, prélèvements oubliés…)',
+   156→      ] }),
+   157→      B({ kind: 'table', title: 'Structure de l\u2019état de rapprochement', headers: ['Comptabilité (512)', '€', 'Relevé bancaire', '€'], rows: [
+   158→        ['Solde fin de mois', 'S1', 'Solde fin de mois du relevé', 'S2'],
+   159→        ['− Chèques en circulation', '−X', '+ Virements en transit', '+Y'],
+   160→        ['− Frais non enregistrés', '−F', '− Écritures déjà comptabilisées', '—'],
+   161→        ['= Solde rapproché', 'R', '= Solde rapproché', 'R'],
+   162→      ] }),
+   163→      B({ kind: 'warn', title: 'Pièges classiques', text: "Confondre débit/credit relevé et comptabilité (le débit du relevé est une sortie pour l'entreprise) ; oublier de comptabiliser les frais découverts ; ne pas vérifier la continuité des soldes du relevé (ligne précédente + mouvement = ligne suivante)." }),
+   164→      B({ kind: 'example', title: 'Cas NOVATECH (décembre)', text: "Le dossier contient volontairement des lignes de relevé sans écriture et des chèques en circulation : l'état de rapprochement du mois 12 doit expliquer intégralement l'écart entre le 512 comptable et le relevé NORDBANK. Aucun écart résiduel non analysé ne doit rester." }),
+   165→    ],
+   166→  },
+   167→  {
+   168→    id: 'FICHE-03',
+   169→    title: 'Lettrer un compte client',
+   170→    category: 'COMPTA',
+   171→    blocks: [
+   172→      B({ kind: 'text', title: 'Objectif', text: "Rapprocher dans le compte auxiliaire client chaque facture de son règlement, pour isoler les soldes non justifiés et alimenter la balance âgée du recouvrement." }),
+   173→      B({ kind: 'list', title: 'Méthode', items: [
+   174→        'Trier le compte auxiliaire par date (le règlement suit la facture)',
+   175→        'Sélectionner la facture et le règlement correspondant (même référence, montant TTC)',
+   176→        'Poser la même marque de lettrage sur les lignes appariées (lettre unique)',
+   177→        'Traiter les écarts résiduels : escompte, avoir partiel, écart d\u2019arrondi → régulariser avant de forcer',
+   178→        'Les lignes non lettrées restantes forment le solde à recouvrer (reliquats à documenter)',
+   179→      ] }),
+   180→      B({ kind: 'table', title: 'Exemple de lettrage', headers: ['Date', 'Pièce', 'Débit', 'Crédit', 'Lettre'], rows: [
+   181→        ['05/03', 'FV-2024-0212', '4 800,00', '—', 'A'],
+   182→        ['04/04', 'VIR-0412', '—', '4 800,00', 'A'],
+   183→        ['12/04', 'FV-2024-0255', '2 150,00', '—', '(non lettré)'],
+   184→      ] }),
+   185→      B({ kind: 'tip', title: 'Reliquat d\u20191 à 5 €', text: "Un reliquat minuscule relève souvent d'un écart d'arrondi ou d'un escompte non comptabilisé : le traiter (compte 658/758 escomptes ou 6588/6658 selon le sens) plutôt que de le laisser pourrir la balance âgée." }),
+   186→      B({ kind: 'warn', title: 'Ne jamais lettrer', text: "Un avoir contre une facture sans vérifier le motif, ni deux montants différents « à peu près égaux » : le lettrage forcé masque les anomalies (doublons de règlement, imputations croisées entre clients)." }),
+   187→    ],
+   188→  },
+   189→  {
+   190→    id: 'FICHE-04',
+   191→    title: 'Passer une écriture de FNP',
+   192→    category: 'COMPTA',
+   193→    blocks: [
+   194→      B({ kind: 'text', title: 'Objectif', text: "Rattacher à l'exercice N une charge consommée dont la facture n'est pas parvenue à la clôture (facture non parvenue), puis gérer son extourne à l'ouverture de N+1." }),
+   195→      B({ kind: 'list', title: 'Conditions à réunir', items: [
+   196→        'La prestation/bien a bien été reçue avant le 31/12 (preuve : bon de réception, contrat)',
+   197→        'Le montant est estimable de façon fiable (dernière facture, contrat, pro rata)',
+   198→        'La charge n\u2019est pas déjà enregistrée (sinon risque de double comptabilisation en N+1)',
+   199→      ] }),
+   200→      B({ kind: 'table', title: 'Écriture type (31/12/N)', headers: ['Compte', 'Libellé', 'Débit', 'Crédit'], rows: [
+   201→        ['612 (ex.)', 'Loyer de décembre non facturé', '3 000,00', '—'],
+   202→        ['445660', 'TVA déductible sur FNP (si exigible)', '600,00', '—'],
+   203→        ['408000', 'Fournisseur — facture non parvenue', '—', '3 600,00'],
+   204→      ] }),
+   205→      B({ kind: 'text', title: 'Extourne (01/01/N+1)', text: "À l'arrivée de la facture en N+1, on extourne la FNP (mêmes lignes en sens inverse) puis on enregistre normalement la facture — sinon la charge serait comptée deux fois." }),
+   206→      B({ kind: 'warn', title: 'Vigilance', text: "Ne jamais passer de FNP sur la seule base d'une commande non livrée (ce serait une provision, pas une FNP). Et toujours tenir le tableau des 408 par fournisseur pour la justification du solde." }),
+   207→      B({ kind: 'example', title: 'Cas NOVATECH', text: "Le dossier contient des charges de décembre à rattacher (maintenance MAINTPRO, électricité) : le tableau des charges et produits à rattacher du livrable LIV-C11 les recense." }),
+   208→    ],
+   209→  },
+   210→  {
+   211→    id: 'FICHE-05',
+   212→    title: 'Calculer un plan d\u2019amortissement',
+   213→    category: 'COMPTA',
+   214→    blocks: [
+   215→      B({ kind: 'text', title: 'Objectif', text: "Établir le tableau d'amortissement linéaire d'une immobilisation, en tenant compte de la date de mise en service et du prorata temporis, et comptabiliser la dotation." }),
+   216→      B({ kind: 'list', title: 'Étapes', items: [
+   217→        'Identifier la valeur d\u2019origine (coût d\u2019acquisition : prix + frais accessoires)',
+   218→        'Déterminer la durée d\u2019usage (usuellement 3 à 10 ans selon la nature — à justifier)',
+   219→        'Calculer le taux linéaire = 100 % ÷ durée',
+   220→        'Appliquer le prorata de la première annuité (en mois ou jours depuis la mise en service)',
+   221→        'Remplir le tableau : annuité, cumul, VNC fin d\u2019exercice',
+   222→        'Comptabiliser : débit 6811, crédit 28xx',
+   223→      ] }),
+   224→      B({ kind: 'table', title: 'Exemple : serveur 10 000 €, 5 ans, mis en service le 01/04', headers: ['Exercice', 'Base', 'Annuité', 'Cumul', 'VNC'], rows: [
+   225→        ['N', '10 000,00', '1 500,00 (9/12)', '1 500,00', '8 500,00'],
+   226→        ['N+1', '10 000,00', '2 000,00', '3 500,00', '6 500,00'],
+   227→        ['…', '10 000,00', '2 000,00', '…', '…'],
+   228→        ['N+5', '10 000,00', '500,00 (3/12)', '10 000,00', '0,00'],
+   229→      ] }),
+   230→      B({ kind: 'warn', title: 'Erreurs fréquentes', text: "Démarrer l'amortissement à la date de facture au lieu de la mise en service ; oublier le prorata de la dernière annuité (la ligne « taquet » du tableau) ; amortir un terrain (non amortissable) ; confondre dépréciation et amortissement." }),
+   231→      B({ kind: 'tip', title: 'Contrôle de révision', text: "Recalculer systématiquement une ligne sur deux du registre et comparer dotation comptabilisée ↔ somme des dotations théoriques : tout écart doit être expliqué (cession, dépréciation, durées révisées)." }),
+   232→    ],
+   233→  },
+   234→  {
+   235→    id: 'FICHE-06',
+   236→    title: 'Traiter un écart d\u2019inventaire',
+   237→    category: 'COMPTA',
+   238→    blocks: [
+   239→      B({ kind: 'text', title: 'Objectif', text: "Comparer stock théorique (informatique) et stock physique (inventaire), analyser les écarts et les comptabiliser correctement (et non les « recaler » silencieusement)." }),
+   240→      B({ kind: 'list', title: 'Méthode', items: [
+   241→        'Rapprocher les quantités théoriques/physiques par référence (feuille d\u2019inventaire validée)',
+   242→        'Analyser chaque écart : casse, vol, erreur de saisie, livraison non enregistrée, cut-off',
+   243→        'Valoriser les écarts au coût d\u2019entrée des articles concernés (CMUP ou FIFO)',
+   244→        'Comptabiliser la correction du stock : 6031/37 pour la variation, dépréciation 6817/39 si la valeur nette de réalisation est inférieure',
+   245→        'Documenter l\u2019analyse des causes (les auditeurs la demanderont systématiquement)',
+   246→      ] }),
+   247→      B({ kind: 'table', title: 'Écritures types', headers: ['Situation', 'Débit', 'Crédit'], rows: [
+   248→        ['Stock final > stock initial (augmentation)', '335 (variation)', '6031'],
+   249→        ['Stock final < stock initial (diminution)', '6031', '335'],
+   250→        ['Dépréciation nécessaire', '6817', '397'],
+   251→        ['Reprise de dépréciation', '397', '7817'],
+   252→      ] }),
+   253→      B({ kind: 'warn', title: 'Vigilance', text: "Un écart d'inventaire non justifié est un indice classique de fraude ou de cut-off erroné. Ne jamais ajuster le stock physique pour le faire coller au théorique : c'est le physique qui fait foi." }),
+   254→      B({ kind: 'example', title: 'Cas NOVATECH', text: "L'inventaire physique du 28/12 du dossier révèle des écarts volontaires (composants) : le tableau des stocks (LIV-C09) attend le détail des écarts et la dépréciation éventuelle." }),
+   255→    ],
+   256→  },
+   257→  {
+   258→    id: 'FICHE-07',
+   259→    title: 'Contrôler la TVA du mois',
+   260→    category: 'FISCAL',
+   261→    blocks: [
+   262→      B({ kind: 'text', title: 'Objectif', text: "Vérifier la cohérence de la TVA collectée et déductible du mois avant la liquidation CA3 : taux, bases, doublons, rattachement." }),
+   263→      B({ kind: 'list', title: 'Contrôles clés', items: [
+   264→        'TVA collectée ÷ ventes HT du mois ≈ taux moyen pondéré attendu (un mix 20 % / 5,5 % déforme la moyenne — l\u2019expliquer)',
+   265→        'TVA déductible : chaque facture porte un taux justifié (5,5 % électricité, 20 % matériel…)',
+   266→        'Aucune écriture de TVA sans pièce conforme (mention du taux et de la base)',
+   267→        'Aucun doublon de pièce (TVA déduite deux fois = redressement)',
+   268→        'Les avoirs du mois réduisent la collectée (ou augmentent la déductible pour les avoirs fournisseurs)',
+   269→        'Cohérence annuelle : Σ TVA collectée mensuelle = TVA de la déclaration annuelle (contrôle de synthèse)',
+   270→      ] }),
+   271→      B({ kind: 'table', title: 'Format du contrôle', headers: ['Mois', 'Collectée', 'Déductible', 'À décaisser', 'Contrôle'], rows: [
+   272→        ['Janvier', 'à calculer', 'à calculer', 'C − D', 'taux moyen ✔/✘'],
+   273→        ['…', '…', '…', '…', '…'],
+   274→      ] }),
+   275→      B({ kind: 'warn', title: 'Ce qu\u2019il faut vérifier à la source', text: "Les dates limites réelles de dépôt et les modalités de télétransmission dépendent du régime et de la situation de chaque entreprise — consultez impots.gouv.fr et le BOFiP pour les règles applicables. Le « le 20 » de ce simulateur est une convention pédagogique." }),
+   276→      B({ kind: 'tip', title: 'Écart de 1 centime', text: "Les arrondis par ligne créent de petits écarts entre TVA recalculée et TVA facturée : la pratique consiste à retenir le montant de la facture (la TVA se calcule ligne à ligne chez l'émetteur)." }),
+   277→    ],
+   278→  },
+   279→  {
+   280→    id: 'FICHE-08',
+   281→    title: 'Établir la balance après inventaire',
+   282→    category: 'COMPTA',
+   283→    blocks: [
+   284→      B({ kind: 'text', title: 'Objectif', text: "Produire la balance définitive intégrant toutes les écritures de régularisation (inventaire, cut-off, dotations, dépréciations), prête pour l'édition des états financiers." }),
+   285→      B({ kind: 'list', title: 'Séquence de contrôle', items: [
+   286→        'S\u2019assurer que toutes les écritures d\u2019inventaire sont passées (check-list LIV-C16)',
+   287→        'Éditer la balance à 6 colonnes : ouverture, mouvements, clôture',
+   288→        'Vérifier Σ débits = Σ crédits sur les 3 paires de colonnes',
+   289→        'Vérifier la cohérence avec le grand livre (le total d\u2019un compte = la somme de ses lignes)',
+   290→        'Contrôler les comptes sensibles : 4456/4457 apurés, 108 soldé, résultat = produits − charges',
+   291→        'Geler l\u2019écriture (plus aucune saisie avant la production des états)',
+   292→      ] }),
+   293→      B({ kind: 'table', title: 'Contrôles de clôture', headers: ['Contrôle', 'Attendu'], rows: [
+   294→        ['Σ débits = Σ crédits', 'Oui, sur chaque colonne'],
+   295→        ['Total 6 = total 7 (classes 6 et 7)', 'égal au résultat de l\u2019exercice'],
+   296→        ['Comptes de régularisation (486/487/408/418)', 'justifiés par tableaux annexes'],
+   297→        ['Soldes de tiers', 'apurement auxiliaire = général'],
+   298→      ] }),
+   299→      B({ kind: 'warn', title: 'Écart résiduel', text: "Toute anomalie d'équilibre doit être tracée et corrigée AVANT l'édition des états : une « balance à trous » fausse le bilan et le compte de résultat simultanément." }),
+   300→    ],
+   301→  },
+   302→  {
+   303→    id: 'FICHE-09',
+   304→    title: 'Rédiger une note de synthèse',
+   305→    category: 'TRANSVERSE',
+   306→    blocks: [
+   307→      B({ kind: 'text', title: 'Objectif', text: "Communiquer au chef de mission, en une page dense et hiérarchisée, l'essentiel des travaux, des anomalies et des questions ouvertes. La note de synthèse est un exercice professionnel coté en entretien." }),
+   308→      B({ kind: 'list', title: 'Structure recommandée', items: [
+   309→        'Conclusion d\u2019abord (une phrase : dossier fiable / points à arbitrer)',
+   310→        'Travaux réalisés (avec références des feuilles de travail)',
+   311→        'Anomalies signalées (gravité, incidence chiffrée, proposition de traitement)',
+   312→        'Questions ouvertes (responsable, échéance)',
+   313→        'Recommandations opérationnelles',
+   314→      ] }),
+   315→      B({ kind: 'table', title: 'Qualités attendues', headers: ['Qualité', 'Concret'], rows: [
+   316→        ['Hiérarchisée', 'le critique avant le mineur'],
+   317→        ['Chiffrée', 'montants, écarts, pourcentages'],
+   318→        ['Traçable', 'références des pièces et feuilles'],
+   319→        ['Actionnable', 'qui fait quoi pour quand'],
+   320→      ] }),
+   321→      B({ kind: 'tip', title: 'Une note efficace', text: "Commencez par la conclusion (méthode « bottom line up front ») : le lecteur pressé doit tout comprendre en 15 secondes. Le détail vient ensuite — jamais l'inverse." }),
+   322→      B({ kind: 'example', title: 'Cas NOVATECH', text: "Le livrable LIV-C17 attend exactement cette structure : travaux, anomalies, questions ouvertes, recommandations — avec des montants réels du dossier." }),
+   323→    ],
+   324→  },
+   325→  {
+   326→    id: 'FICHE-10',
+   327→    title: 'Construire un tableau des anomalies d\u2019audit',
+   328→    category: 'AUDIT',
+   329→    blocks: [
+   330→      B({ kind: 'text', title: 'Objectif', text: "Recenser les anomalies relevées (corrigées et non corrigées), les extrapoler si nécessaire, comparer le cumul aux seuils et conclure sur l'incidence sur l'opinion (logique NEP 450)." }),
+   331→      B({ kind: 'list', title: 'Colonnes indispensables', items: [
+   332→        'Référence de l\u2019anomalie (lien vers la feuille de travail)',
+   333→        'Cycle / compte / assertion concernés',
+   334→        'Description factuelle',
+   335→        'Montant (corrigé / non corrigé)',
+   336→        'Origine : erreur, fraude, jugement, estimation',
+   337→        'Correction proposée et statut client (corrigée ou non)',
+   338→      ] }),
+   339→      B({ kind: 'table', title: 'Évaluation du cumul', headers: ['Comparaison', 'Lecture'], rows: [
+   340→        ['Cumul < seuil de remontée (SAM)', 'non significatif en cumul'],
+   341→        ['Cumul ≥ SAM mais < seuil de signification', 'à surveiller, arbitrage documenté'],
+   342→        ['Cumul ≥ seuil de signification', 'incidence sur l\u2019opinion : réserve à envisager'],
+   343→        ['Anomalie qualitative (fraude, non-conformité)', 'incidence même sous les seuils'],
+   344→      ] }),
+   345→      B({ kind: 'warn', title: 'Règle d\u2019or', text: "Une anomalie n'est jamais « oubliée » : même corrigée par le client, elle reste dans le tableau (colonne corrigée) — c'est la mémoire de la mission et la preuve de la revue." }),
+   346→      B({ kind: 'tip', title: 'Extrapolation', text: "En échantillonnage, on projette l'anomalie détectée à la population testée selon la méthode retenue — l'hypothèse d'extrapolation doit être documentée et défendable, pas magique." }),
+   347→    ],
+   348→  },
+   349→  {
+   350→    id: 'FICHE-11',
+   351→    title: 'Préparer une confirmation de solde client',
+   352→    category: 'AUDIT',
+   353→    blocks: [
+   354→      B({ kind: 'text', title: 'Objectif', text: "Obtenir directement du tiers la confirmation du solde dû (demande directe positive), l'un des éléments probants les plus forts sur l'assertion d'existence des créances (NEP 505)." }),
+   355→      B({ kind: 'list', title: 'Préparation de la campagne', items: [
+   356→        'Sélectionner les tiers à confirmer (concentration des soldes, risque, rotation)',
+   357→        'Rédiger la demande : solde au 31/12 détaillé par factures, coordonnées de retour VERS L\u2019AUDITEUR uniquement',
+   358→        'Faire partir la demande par l\u2019auditeur (jamais par le client)',
+   359→        'Relancer à J+15, tracer les relances',
+   360→        'Sans réponse : mettre en œuvre une procédure alternative (vérification des encaissements postérieurs sur le relevé bancaire)',
+   361→        'Analyser les écarts de réponse : ils pointent des anomalies réelles (lettrage, avoirs non enregistrés, litiges)',
+   362→      ] }),
+   363→      B({ kind: 'table', title: 'Types de confirmation', headers: ['Type', 'Mécanisme', 'Force probante'], rows: [
+   364→        ['Positive directe', 'le tiers répond à l\u2019auditeur (montant indiqué)', 'forte'],
+   365→        ['Positive « vierge »', 'le tiers renseigne lui-même le montant', 'très forte'],
+   366→        ['Négative', 'réponse seulement en cas de désaccord', 'faible (réservée à des cas précis)'],
+   367→      ] }),
+   368→      B({ kind: 'warn', title: 'Ne jamais', text: "Laisser le client envoyer ou recevoir les confirmations (risque d'interception/modification), ni considérer une absence de réponse comme une confirmation. L'écart de réponse se traite toujours." }),
+   369→      B({ kind: 'example', title: 'Cas NOVATECH', text: "La balance âgée du dossier (A-M9-AUX) sert de base à la sélection : les clients significatifs (DELTACOM, TECHNOPOLIS…) sont candidats naturels à la confirmation." }),
+   370→    ],
+   371→  },
+   372→  {
+   373→    id: 'FICHE-12',
+   374→    title: 'Comparer PCG et IFRS (aperçu pédagogique)',
+   375→    category: 'COMPTA',
+   376→    blocks: [
+   377→      B({ kind: 'text', title: 'Objectif', text: "Situer les deux référentiels : quand les IFRS s'appliquent-elles, et quelles sont les grandes différences de logique avec le PCG. Aperçu volontairement simplifié — les référentiels évoluent." }),
+   378→      B({ kind: 'list', title: 'Où les IFRS sont utiles', items: [
+   379→        'Comptes consolidés des sociétés cotées européennes (règlement européen d\u2019application des IFRS)',
+   380→        'Groupes voulant un langage comparable internationalement (emprunts, investisseurs étrangers)',
+   381→        'Certains contrats et instruments financiers analysés finement (IAS 32/39 puis IFRS 9)',
+   382→      ] }),
+   383→      B({ kind: 'table', title: 'Différences clés (illustration)', headers: ['Sujet', 'PCG (comptes individuels)', 'IFRS (tendance)'], rows: [
+   384→        ['Évaluation', 'coût historique dominant', 'juste valeur possible pour plusieurs catégories'],
+   385→        ['Provisions', 'conditions strictes, tableau de passage fiscal', 'approche « ressource sacrifiée », actualisation fréquente'],
+   386→        ['Présentation', 'liasses et classes PCG imposées', 'flexibilité encadrée, tableau de flux normalisé'],
+   387→        ['Amortissement', 'plan par composant, durée d\u2019usage', 'composants aussi, révision de durée/valeur plus intégrée'],
+   388→        ['Stocks', 'CMUP ou FIFO, dépréciation', 'FIFO ou coût standard, dépréciation sur valeur nette de réalisation'],
+   389→      ] }),
+   390→      B({ kind: 'warn', title: 'Ne jamais mélanger', text: "En France, les comptes individuels demeurent au PCG (et alimentent le résultat fiscal) ; les IFRS concernent essentiellement la consolidation. Un « mélange » des deux présentations est une faute de lecture du référentiel applicable." }),
+   391→      B({ kind: 'tip', title: 'Pour aller plus loin', text: "Les textes IFRS sont publiés par l'IASB et accessibles via les sites officiels ; en France, l'ANC reste la source du PCG. Vérifiez toujours la version en vigueur des normes avant d'en faire usage." }),
+   392→    ],
+   393→  },
+   394→]
+   395→
+   396→// ------------------------------------------------------------
+   397→// 3. RÉFÉRENCES OFFICIELLES (URLs réelles — contenu à vérifier)
+   398→// ------------------------------------------------------------
+   399→
+   400→export interface OfficialReference {
+   401→  name: string
+   402→  organism: string
+   403→  url: string
+   404→  what: string
+   405→  verified: boolean
+   406→}
+   407→
+   408→export const OFFICIAL_REFERENCES: OfficialReference[] = [
+   409→  {
+   410→    name: 'Autorité des normes comptables (ANC)',
+   411→    organism: 'ANC — autorité de régulation comptable française',
+   412→    url: 'https://www.autorite-des-normes-comptables.fr/',
+   413→    what: "Règlements comptables nationaux : plan comptable général, règlements sectoriels, avis et travaux de l'Autorité. Source du PCG applicable aux comptes individuels français.",
+   414→    verified: false,
+   415→  },
+   416→  {
+   417→    name: 'BOFiP — Bulletin officiel des finances publiques',
+   418→    organism: 'Direction générale des Finances publiques (DGFiP)',
+   419→    url: 'https://bofip.impots.gouv.fr/',
+   420→    what: 'Doctrine fiscale administrative commentée : base de la position de l\u2019administration sur les impôts (IS, TVA, TVS…). À rechercher par impôt et par thème.',
+   421→    verified: false,
+   422→  },
+   423→  {
+   424→    name: 'impots.gouv.fr — espace professionnel',
+   425→    organism: 'DGFiP',
+   426→    url: 'https://www.impots.gouv.fr/',
+   427→    what: "Déclarations et paiements des professionnels (TVA CA3, IS, TVS), calendrier fiscal, formulaires, téléprocédures de l'entreprise.",
+   428→    verified: false,
+   429→  },
+   430→  {
+   431→    name: 'service-public.fr — professionnels',
+   432→    organism: 'Direction de l\u2019information légale et administrative (DILA)',
+   433→    url: 'https://entreprendre.service-public.fr/',
+   434→    what: "Fiches de droits et démarches pour les entreprises : création, modification, obligations sociales et juridiques, fiches pratiques vulgarisées et fiables.",
+   435→    verified: false,
+   436→  },
+   437→  {
+   438→    name: 'Légifrance',
+   439→    organism: 'Service public de la diffusion du droit',
+   440→    url: 'https://www.legifrance.gouv.fr/',
+   441→    what: 'Textes officiels bruts : Code de commerce (commissariat aux comptes, comptes annuels), Code général des impôts, Code de commerce et Code de procédure civile consolidés.',
+   442→    verified: false,
+   443→  },
+   444→  {
+   445→    name: 'CNCC — Compagnie nationale des commissaires aux comptes',
+   446→    organism: 'CNCC',
+   447→    url: 'https://www.cncc.fr/',
+   448→    what: "Normes d'exercice professionnel (NEP) homologuées, publications et documentation du commissariat aux comptes : cadre professionnel de l'audit légal français.",
+   449→    verified: false,
+   450→  },
+   451→]
+   452→
+   453→export const REFERENCES_GENERAL_WARNING =
+   454→  "Les règles comptables, fiscales et d'audit évoluent : la date de référence du contenu pédagogique est celle de consultation du simulateur. Les liens ci-dessus pointent vers les sites officiels — vérifiez y toujours la version en vigueur. Le contenu de ce site pédagogique ne remplace pas les sources officielles."
+   455→
+   456→// ------------------------------------------------------------
+   457→// 4. COMPARATIF PCG / IFRS (espace séparé)
+   458→// ------------------------------------------------------------
+   459→
+   460→export const PCG_IFRS_COMPARISON = {
+   461→  intro:
+   462→    "Deux référentiels, deux logiques. Le PCG (comptes individuels français) privilégie la prudence et le coût historique ; les IFRS (référentiel international) privilégient l'information économique de l'investisseur. Cette section est un espace comparatif séparé : elle ne modifie jamais les données du dossier NOVATECH, traitées intégralement en PCG.",
+   463→  whereIfrs: [
+   464→    "Comptes consolidés des sociétés cotées sur un marché réglementé européen (obligation tirée du règlement européen relatif à l\u2019application des normes internationales)",
+   465→    "Groupes non cotés cherchant un langage financier comparable à l\u2019international (investisseurs, financements)",
+   466→    "Analyse fine des instruments financiers et contrats complexes",
+   467→  ],
+   468→  differences: [
+   469→    { topic: 'Évaluation des actifs', pcg: 'Coût historique dominant, dépréciations en valeur d\u2019usage', ifrs: 'Juste valeur possible pour plusieurs catégories d\u2019actifs (financiers notamment)' },
+   470→    { topic: 'Provisions', pcg: 'Conditions strictes (obligation à la clôture, sortie probable, estimation fiable), tableau de passage fiscal', ifrs: 'Notion de « ressource sacrifice » (IAS 37), actualisation fréquente des passifs' },
+   471→    { topic: 'Présentation des états', pcg: 'Classes de comptes et modèles de bilan/CR du PCG, liasse fiscale associée', ifrs: 'Présentation par fonction ou par nature flexible (IAS 1), tableau des flux de trésorerie normalisé (IFRS)' },
+   472→    { topic: 'Amortissements', pcg: 'Approche par composants, durée d\u2019usage, prorata temporis', ifrs: 'Composants aussi, mais réévaluation de durée/résiduel intégrée au jugement annuel' },
+   473→    { topic: 'Capitaux propres', pcg: 'Report à nouveau et réserves légales dans les capitaux propres ; affectation du résultat formalisée', ifrs: 'Aucune réserve légale, résultat et autres éléments du résultat global regroupés' },
+   474→  ],
+   475→  warning:
+   476→    "En France, les comptes individuels des sociétés demeurent établis en PCG et nourrissent le résultat fiscal. Les IFRS concernent principalement les comptes consolidés. Les deux présentations ne se mélangent jamais dans un même jeu d'états.",
+   477→}
+   478→

@@ -28,43 +28,44 @@ interface NavItem {
   icon: React.ReactNode
   badge?: 'anomalies'
   locked?: 'pathB'
+  shortcut?: string // lettre du raccourci « g + lettre »
 }
 
 const NAV_ITEMS: { section: string; items: NavItem[] }[] = [
   {
     section: 'Pilotage',
     items: [
-      { id: 'dashboard', label: 'Tableau de bord', icon: <LayoutDashboard className="size-4" /> },
-      { id: 'calendar', label: 'Calendrier annuel', icon: <CalendarDays className="size-4" /> },
+      { id: 'dashboard', label: 'Tableau de bord', icon: <LayoutDashboard className="size-4" />, shortcut: 'd' },
+      { id: 'calendar', label: 'Calendrier annuel', icon: <CalendarDays className="size-4" />, shortcut: 'k' },
     ],
   },
   {
     section: 'Formation',
     items: [
-      { id: 'learning', label: 'Parcours d\u2019apprentissage', icon: <GraduationCap className="size-4" /> },
-      { id: 'assessment', label: 'Évaluation & compétences', icon: <ClipboardCheck className="size-4" /> },
-      { id: 'knowledge', label: 'Centre de connaissances', icon: <BookOpenCheck className="size-4" /> },
+      { id: 'learning', label: 'Parcours d\u2019apprentissage', icon: <GraduationCap className="size-4" />, shortcut: 'l' },
+      { id: 'assessment', label: 'Évaluation & compétences', icon: <ClipboardCheck className="size-4" />, shortcut: 'e' },
+      { id: 'knowledge', label: 'Centre de connaissances', icon: <BookOpenCheck className="size-4" />, shortcut: 'n' },
     ],
   },
   {
     section: 'Dossier client — NOVATECH',
     items: [
-      { id: 'client-space', label: 'Espace client', icon: <Building2 className="size-4" /> },
-      { id: 'documents', label: 'Centre documentaire', icon: <FileStack className="size-4" /> },
+      { id: 'client-space', label: 'Espace client', icon: <Building2 className="size-4" />, shortcut: 'c' },
+      { id: 'documents', label: 'Centre documentaire', icon: <FileStack className="size-4" />, shortcut: 'o' },
     ],
   },
   {
     section: 'Ateliers de travail',
     items: [
-      { id: 'workshop', label: 'Atelier comptable', icon: <Wrench className="size-4" /> },
-      { id: 'audit', label: 'Mission d\u2019audit', icon: <FolderOpen className="size-4" />, locked: 'pathB' },
+      { id: 'workshop', label: 'Atelier comptable', icon: <Wrench className="size-4" />, shortcut: 'w' },
+      { id: 'audit', label: 'Mission d\u2019audit', icon: <FolderOpen className="size-4" />, locked: 'pathB', shortcut: 'a' },
     ],
   },
   {
     section: 'Production',
     items: [
-      { id: 'deliverables', label: 'Dossier de livrables', icon: <FolderOpen className="size-4" /> },
-      { id: 'settings', label: 'Paramètres & données', icon: <Settings className="size-4" /> },
+      { id: 'deliverables', label: 'Dossier de livrables', icon: <FolderOpen className="size-4" />, shortcut: 'v' },
+      { id: 'settings', label: 'Paramètres & données', icon: <Settings className="size-4" />, shortcut: 'p' },
     ],
   },
 ]
@@ -126,7 +127,7 @@ export function Sidebar({
                               className={cn(
                                 'group flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm transition-colors',
                                 isActive
-                                  ? 'bg-sidebar-primary font-medium text-sidebar-primary-foreground'
+                                  ? 'nav-active-accent bg-sidebar-primary font-medium text-sidebar-primary-foreground'
                                   : 'text-sidebar-foreground/90 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
                                 isLocked && 'cursor-not-allowed opacity-60',
                               )}
@@ -139,13 +140,27 @@ export function Sidebar({
                                 <Badge className="h-5 min-w-5 shrink-0 rounded-full px-1.5 text-[10px] tabular-nums">
                                   {openAnomalies}
                                 </Badge>
+                              ) : item.shortcut && !isActive ? (
+                                <kbd className="hidden shrink-0 rounded border border-sidebar-foreground/20 bg-sidebar-accent/50 px-1 py-0 font-mono text-[10px] font-semibold text-sidebar-foreground/50 opacity-0 transition-opacity group-hover:opacity-100 lg:inline-flex" aria-hidden="true">
+                                  g {item.shortcut}
+                                </kbd>
                               ) : null}
                             </button>
                           </TooltipTrigger>
                           <TooltipContent side="right" className="text-xs">
-                            {isLocked
-                              ? 'Parcours A (comptabilité) à terminer pour débloquer la mission d\u2019audit'
-                              : item.label}
+                            {isLocked ? (
+                              'Parcours A (comptabilité) à terminer pour débloquer la mission d\u2019audit'
+                            ) : (
+                              <span className="flex items-center gap-2">
+                                {item.label}
+                                {item.shortcut ? (
+                                  <span className="flex gap-0.5">
+                                    <kbd className="inline-flex h-4 min-w-4 items-center justify-center rounded border bg-muted px-1 font-mono text-[10px] font-semibold text-muted-foreground">g</kbd>
+                                    <kbd className="inline-flex h-4 min-w-4 items-center justify-center rounded border bg-muted px-1 font-mono text-[10px] font-semibold text-muted-foreground">{item.shortcut}</kbd>
+                                  </span>
+                                ) : null}
+                              </span>
+                            )}
                           </TooltipContent>
                         </Tooltip>
                       )

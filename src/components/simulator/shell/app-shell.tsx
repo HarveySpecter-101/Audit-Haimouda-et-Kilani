@@ -19,7 +19,6 @@ export function AppShell() {
   const view = useSimulator((s) => s.view)
   const bootstrapped = useSimulator((s) => s.bootstrapped)
   const setBootstrapped = useSimulator((s) => s.setBootstrapped)
-  const pathBUnlocked = useSimulator((s) => s.pathBUnlocked)
   const setPathBUnlocked = useSimulator((s) => s.setPathBUnlocked)
 
   const boot = useQuery<{ alerts?: { openAnomalies: number }; counts: { anomalies: number } }>({
@@ -33,15 +32,17 @@ export function AppShell() {
     retry: 1,
   })
 
-  useEffect(() => {
-    if (boot.isSuccess && !bootstrapped) setBootstrapped(true)
-  }, [boot.isSuccess, bootstrapped, setBootstrapped])
-
-  // Synchronise le déblocage du parcours B depuis l'état serveur (persistant)
+  // À la première récupération du bootstrap : le serveur est la source de vérité
+  // durable du déblocage du parcours B (bidirectionnel : re-synchronise aussi un
+  // localStorage périmé qui afficherait « débloqué » alors que le serveur a re-verrouillé).
+  // Les déblocages ultérieurs en session mettent à jour serveur + store ensemble (learning-view).
   const appStateUnlocked = (boot.data as { appState?: { pathBUnlocked?: boolean } } | undefined)?.appState?.pathBUnlocked === true
   useEffect(() => {
-    if (appStateUnlocked && !pathBUnlocked) setPathBUnlocked(true)
-  }, [appStateUnlocked, pathBUnlocked, setPathBUnlocked])
+    if (boot.isSuccess && !bootstrapped) {
+      setBootstrapped(true)
+      setPathBUnlocked(appStateUnlocked)
+    }
+  }, [boot.isSuccess, bootstrapped, appStateUnlocked, setBootstrapped, setPathBUnlocked])
 
   // Titre dynamique de la page selon la vue active
   useEffect(() => {

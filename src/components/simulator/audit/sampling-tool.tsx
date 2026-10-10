@@ -7,13 +7,14 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { EmptyState } from '@/components/simulator/shared/ui-bits'
 import { fmtEUR } from '@/lib/engine/format'
+import { useToast } from '@/hooks/use-toast'
 import { useWorksheet } from '@/components/simulator/audit/worksheet-hooks'
 import type { SampleItemState, SamplingWorksheet } from '@/components/simulator/audit/worksheet-hooks'
+import { SamplingChart } from '@/components/simulator/audit/sampling-chart'
 import {
   extrapolate,
   selectSample,
@@ -24,7 +25,7 @@ import {
   type SamplingMethod,
   type TestResult,
 } from '@/lib/engine/sampling'
-import { Crosshair, Dices, FlaskConical, Info, Save, ShieldAlert, ShieldCheck, TriangleAlert } from 'lucide-react'
+import { Crosshair, Dices, Download, FlaskConical, Info, Layers, Printer, Save, ShieldAlert, ShieldCheck, TriangleAlert } from 'lucide-react'
 
 // ============================================================
 // OUTIL D'ÉCHANTILLONNAGE & EXTRAPOLATION STATISTIQUE (NEP 530)
@@ -80,8 +81,32 @@ const toState = (it: PopulationItem & { date?: string; label?: string }): Sample
   error: 0,
 })
 
+// ---------- Export CSV (convention Excel FR : BOM + séparateur « ; ») ----------
+
+const CSV_STATUS: Record<TestResult['status'], string> = {
+  PENDING: 'À tester',
+  OK: 'Conforme',
+  ERROR: 'Anomalie',
+}
+
+/** Échappe une cellule CSV : guillemets si « ; », quote ou saut de ligne. */
+function csvCell(v: string | number): string {
+  const s = String(v)
+  return /[";\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+}
+
+/** Montant au format FR (virgule décimale, sans séparateur de milliers). */
+function csvNum(v: number): string {
+  return v.toFixed(2).replace('.', ',')
+}
+
+function csvRow(...cells: (string | number)[]): string {
+  return cells.map(csvCell).join(';')
+}
+
 export function SamplingTool() {
   const { ws, save } = useWorksheet()
+  const { toast } = useToast()
 
   // ---- Population réelle : journal des ventes ----
   const sales = useQuery<{ entries: SalesEntry[]; total: number }>({
@@ -130,6 +155,8 @@ export function SamplingTool() {
   // des données — pas d'effet de synchronisation nécessaire)
   const [sampleOverride, setSampleOverride] = useState<TestResult[] | null>(null)
   const [hvOverride, setHvOverride] = useState<TestResult[] | null>(null)
+  // Commutateur du graphique de répartition : inclure la strate exhaustive
+  const [includeHv, setIncludeHv] = useState(true)
 
   // Échantillon restauré depuis la feuille (format complet, ou anciennes
   // références seules converties en items « à tester » dès que la
@@ -215,6 +242,96 @@ export function SamplingTool() {
       },
     }
     save.mutate({ section: 'sampling', data: payload })
+  }
+
+  // ---- Export CSV de traçabilité (généré côté client) ----
+  const methodLabel = METHODS.find((m) => m.value === method)?.label ?? method
+
+  const exportCsv = () => {
+    const labelByRef = new Map(population.map((p) => [p.ref, p.label ?? '']))
+    const taintingPct = (it: TestResult) =>
+      it.status === 'ERROR' && it.book > 0
+        ? `${(Math.min(1, Math.max(0, it.error) / it.book) * 100).toFixed(2).replace('.', ',')} %`
+        : ''
+    const itemRow = (it: TestResult) =>
+      csvRow(
+        it.ref,
+        labelByRef.get(it.ref) ?? '',
+        csvNum(it.book),
+        CSV_STATUS[it.status],
+        it.status === 'ERROR' ? csvNum(it.error) : it.status === 'OK' ? csvNum(0) : '',
+        taintingPct(it),
+      )
+
+    const now = new Date()
+    const genDate = `${now.toLocaleDateString('fr-FR')} ${now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`
+    const rows: string[] = [
+      // 1. En-tête de traçabilité
+      `# Outil d'échantillonnage NEP 530 — NOVATECH DISTRIBUTION SAS (fictif)`,
+      `# Méthode : ${methodLabel}`,
+      `# Graine : ${seed}`,
+      `# Confiance : ${confidence === 0.95 ? '95 %' : '90 %'}`,
+      `# Généré le : ${genDate}`,
+      '',
+      // 2. Paramètres
+      '# PARAMÈTRES',
+      csvRow('paramètre', 'valeur'),
+      csvRow('Population (factures)', population.length),
+      csvRow('Valeur totale population (€)', csvNum(population.reduce((s, p) => s + p.book, 0))),
+      csvRow('Population sondée hors strate (factures)', samplingPop.length),
+      csvRow('Valeur population sondée (€)', csvNum(samplingValue)),
+      csvRow('Seuil de strate exhaustive (>=)', hvThreshold),
+      csvRow('Items en strate exhaustive', hvItems.length),
+      csvRow("Taille d'échantillon sondé (n)", sampleItems.length),
+    ]
+
+    // 3. Strate des valeurs élevées
+    if (hvItems.length > 0) {
+      rows.push('', '# STRATE DES VALEURS ÉLEVÉES — EXAMEN EXHAUSTIF')
+      rows.push(csvRow('référence', 'libellé', 'montant', 'statut test', 'erreur constatée', 'tainting %'))
+      for (const it of hvItems) rows.push(itemRow(it))
+    }
+
+    // 4. Échantillon sondé
+    rows.push('', '# ÉCHANTILLON SONDÉ')
+    rows.push(csvRow('référence', 'libellé', 'montant', 'statut test', 'erreur constatée', 'tainting %'))
+    for (const it of sampleItems) rows.push(itemRow(it))
+
+    // 5. Extrapolation
+    rows.push(
+      '',
+      '# EXTRAPOLATION',
+      csvRow('indicateur', 'valeur'),
+      csvRow("Méthode d'extrapolation", method === 'mus' ? 'Stringer (MUS)' : 'MPU ± précision'),
+      csvRow('Intervalle de sondage J (€)', csvNum(interval)),
+      csvRow('Erreur projetée — population sondée (€)', csvNum(extrap.projected)),
+      csvRow('Erreurs strate exhaustive à 100 % (€)', csvNum(extrap.highValueError)),
+      csvRow('Erreur projetée totale (€)', csvNum(extrap.projectedTotal)),
+      csvRow('Précision statistique (€)', csvNum(extrap.precision)),
+      csvRow('Limite supérieure de l’erreur — UEL (€)', csvNum(extrap.uel)),
+      csvRow('Seuil de signification (€)', csvNum(thresholds.signification)),
+      csvRow('Seuil de planification (€)', csvNum(thresholds.planification)),
+      csvRow('Seuil de remontée (€)', csvNum(thresholds.remontee)),
+      csvRow('Seuils utilisés', thresholds.saved ? 'feuille « Seuils » sauvegardée' : 'valeurs par défaut (feuille « Seuils » non sauvegardée)'),
+      csvRow('Items testés', `${testedCount}/${totalCount}`),
+      csvRow('Items fautifs', extrap.errorCount + hvErrorCount),
+      csvRow('Verdict', verdict.label),
+      csvRow('Détail du verdict', verdict.detail),
+    )
+
+    const blob = new Blob([`\uFEFF${rows.join('\r\n')}\r\n`], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `echantillon-audit-${seed}.csv`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+    toast({
+      title: 'Export CSV généré',
+      description: `${totalCount} items (échantillon ${sampleItems.length} + strate ${hvItems.length}) — fichier echantillon-audit-${seed}.csv`,
+    })
   }
 
   if (sales.isLoading) {
@@ -348,7 +465,12 @@ export function SamplingTool() {
               Strate des valeurs élevées — examen exhaustif
               <Badge variant="outline" className="normal-case">{hvItems.length} items</Badge>
             </h4>
-            <ScrollArea className="print-expand max-h-56 rounded-md border">
+            {/* Conteneur natif (overflow-y-auto) : clippe et fait défiler
+                réellement le tableau — l'en-tête .table-sticky devient collant —
+                alors qu'un ScrollArea radix sur hauteur max seule laisse la
+                fenêtre (h-full) prendre la hauteur du contenu, qui déborde
+                alors sur les sections suivantes. */}
+            <div className="scroll-slim print-expand max-h-56 overflow-y-auto rounded-md border">
               <table className="table-sticky w-full text-xs">
                 <thead className="bg-muted">
                   <tr className="text-left uppercase text-muted-foreground">
@@ -364,7 +486,7 @@ export function SamplingTool() {
                   ))}
                 </tbody>
               </table>
-            </ScrollArea>
+            </div>
           </div>
         ) : null}
 
@@ -381,7 +503,7 @@ export function SamplingTool() {
               Échantillon sondé
               <Badge variant="outline" className="normal-case">{sampleItems.length} items</Badge>
             </h4>
-            <ScrollArea className="print-expand max-h-80 rounded-md border">
+            <div className="scroll-slim print-expand max-h-80 overflow-y-auto rounded-md border">
               <table className="table-sticky w-full text-xs">
                 <thead className="bg-muted">
                   <tr className="text-left uppercase text-muted-foreground">
@@ -398,9 +520,33 @@ export function SamplingTool() {
                   ))}
                 </tbody>
               </table>
-            </ScrollArea>
+            </div>
           </div>
         )}
+
+        {/* ---------- Répartition population vs échantillon ---------- */}
+        {sampleItems.length > 0 ? (
+          <SamplingChart
+            population={(includeHv ? population : samplingPop).map((p) => ({ amount: p.book }))}
+            sample={(includeHv ? [...sampleItems, ...hvItems] : sampleItems).map((it) => ({ amount: it.book }))}
+            headerExtra={
+              <button
+                type="button"
+                aria-pressed={includeHv}
+                onClick={() => setIncludeHv((v) => !v)}
+                title="Représente la strate des valeurs élevées (testée à 100 %) en plus de l'échantillon sondé, rapportée à la population totale"
+                className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition-colors ${
+                  includeHv
+                    ? 'border-primary/50 bg-primary/10 text-foreground'
+                    : 'border-dashed text-muted-foreground hover:border-primary/50 hover:text-foreground'
+                }`}
+              >
+                <Layers className="size-3.5" aria-hidden />
+                Inclure la strate exhaustive
+              </button>
+            }
+          />
+        ) : null}
 
         {/* ---------- Extrapolation ---------- */}
         {sampleItems.length > 0 ? (
@@ -472,6 +618,25 @@ export function SamplingTool() {
             <Button size="sm" variant="outline" className="gap-1.5" onClick={saveSampling} disabled={save.isPending}>
               <Save className="size-3.5" /> Sauvegarder la feuille d’échantillonnage
             </Button>
+
+            {/* ---------- Export & traçabilité ---------- */}
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3 no-print">
+              <div className="min-w-0">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Export &amp; traçabilité</h4>
+                <p className="text-[11px] text-muted-foreground">
+                  Feuille complète (paramètres, strate exhaustive, échantillon, extrapolation) — graine {seed} : tirage reproductible.
+                </p>
+              </div>
+              <div className="ml-auto flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" className="no-print gap-1.5" onClick={exportCsv}>
+                  <Download className="size-3.5" /> Exporter CSV
+                </Button>
+                <Button size="sm" variant="outline" className="no-print gap-1.5" onClick={() => window.print()}>
+                  <Printer className="size-3.5" /> Imprimer la feuille
+                </Button>
+              </div>
+            </div>
+
             <Separator className="print:hidden" />
             <p className="text-[11px] leading-relaxed text-muted-foreground">
               Formules : MUS — J = V/n ; erreur projetée = Σ(tainting × J) ; UEL = J × [P(0) + Σ(P(k) − P(k−1)) × t₍ₖ₎]

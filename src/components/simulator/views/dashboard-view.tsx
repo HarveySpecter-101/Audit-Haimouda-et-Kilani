@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import { VIEW_LABELS } from '@/lib/store/simulator-store'
 import { StatCard, SectionTitle, ProgressPct, AnomalySeverityBadge } from '@/components/simulator/shared/ui-bits'
 import { ModuleProgressBars, VatBarsMini, DonutScore } from '@/components/simulator/shared/mini-charts'
+import { AchievementsPanel } from '@/components/simulator/shared/achievements-panel'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -142,7 +143,7 @@ export default function DashboardView() {
       </div>
 
       {/* KPI dossier */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="stagger grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="Chiffre d'affaires HT"
           value={fmtEUR(d?.kpi.caHT ?? 0)}
@@ -444,6 +445,9 @@ export default function DashboardView() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Réussites professionnelles (badges de progression) */}
+      <AchievementsPanel />
 
       {/* Sévérité des anomalies ouvertes : légende pédagogique */}
       <Card>

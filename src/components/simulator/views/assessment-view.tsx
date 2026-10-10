@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ViewSkeleton, SectionTitle, StatCard, ProgressPct, EmptyState } from '@/components/simulator/shared/ui-bits'
 import { StageReport, type DeliverableLite, type ProgressLite, type AttemptLite } from '@/components/simulator/assessment/stage-report'
 import { CertificateCard, type CertificateData } from '@/components/simulator/assessment/certificate-card'
+import { ModulePerformance } from '@/components/simulator/assessment/module-performance'
 import { useSimulator } from '@/lib/store/simulator-store'
 import { moduleTitle } from '@/lib/data/module-codes'
 import { fmtDate } from '@/lib/engine/format'
@@ -435,6 +436,9 @@ export default function AssessmentView() {
           </div>
         </CardContent>
       </Card>
+
+      {/* ---------- Performance par module ---------- */}
+      <ModulePerformance attempts={attemptsQuery.data?.attempts} />
 
       {/* ---------- Examens blancs ---------- */}
       <Card>

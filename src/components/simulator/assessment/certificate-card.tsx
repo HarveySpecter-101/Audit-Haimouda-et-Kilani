@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { ProgressPct } from '@/components/simulator/shared/ui-bits'
+import { useToast } from '@/hooks/use-toast'
 import { fmtDate, fmtDateLong } from '@/lib/engine/format'
-import { Award, Info, Lock, Printer } from 'lucide-react'
+import { Award, Copy, Info, Lock, Printer } from 'lucide-react'
 
 // ============================================================
 // ATTESTATION DE FIN DE PARCOURS — section de la vue Évaluation
@@ -16,6 +17,8 @@ import { Award, Info, Lock, Printer } from 'lucide-react'
 // document de l'attestation (aucun impact sur les autres flux d'impression).
 //   - écran : carte avec en-tête + document encadré sobre (teal/slate)
 //   - parcours A non terminé : aperçu flouté + badge de progression
+// F-8a : bouton « Copier » (presse-papiers) — version texte brut miroir
+//   du document, API Clipboard puis repli textarea + execCommand('copy').
 // Type partagé avec /api/progress (import type, aucun runtime).
 // ============================================================
 
@@ -44,7 +47,31 @@ const CHIEF_NAME = 'M. Laurent Vasseur'
 
 const PLURAL = (n: number, one: string, many: string) => (n > 1 ? many : one)
 
+/** Copie de repli pour les contextes sans API Clipboard (HTTP local, vieux
+ *  navigateurs) : <textarea> hors écran + execCommand('copy') héritée.
+ *  Retourne false si même ce repli échoue (pression refusée, DOM illisible…). */
+function legacyCopyText(text: string): boolean {
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.setAttribute('readonly', '')
+    ta.style.position = 'fixed'
+    ta.style.top = '-9999px'
+    ta.style.left = '-9999px'
+    document.body.appendChild(ta)
+    ta.focus()
+    ta.select()
+    ta.setSelectionRange(0, text.length)
+    const ok = document.execCommand('copy')
+    ta.remove()
+    return ok
+  } catch {
+    return false
+  }
+}
+
 export function CertificateCard({ certificate }: { certificate?: CertificateData | null }) {
+  const { toast } = useToast()
   if (!certificate) return null
   const cert = certificate
 
@@ -85,22 +112,114 @@ export function CertificateCard({ certificate }: { certificate?: CertificateData
     },
   ]
 
+  // Version texte brut de l'attestation (F-8a) : miroir ligne à ligne du
+  // document affiché — en-tête, titre, corps (avec ou sans libellé de poste,
+  // complété ou en cours), mentions d'achèvement/poursuite, statistiques,
+  // date + signature, petit-print pédagogique. Réutilise les mêmes libellés
+  // (PLURAL, stats, parcoursLabel) que l'affichage : une seule source.
+  const certificatePlainText = () => {
+    const jobSegment = cert.learnerJobTitle ? ` — ${cert.learnerJobTitle} — ` : ' '
+    const body =
+      `Certifie que ${cert.learnerName}${jobSegment}` +
+      `${completed ? 'a suivi et complété' : 'a suivi'} le parcours ${parcoursLabel}` +
+      `${completed ? '' : ` — en cours de validation (${cert.modulesACompleted} ${PLURAL(cert.modulesACompleted, 'module validé', 'modules validés')} sur ${cert.modulesATotal})`}` +
+      `, avec un score moyen de ${avgPct} % sur ${cert.exercisesPassed} ${PLURAL(cert.exercisesPassed, 'exercice réussi', 'exercices réussis')}` +
+      `, et contribué à la résolution de ${cert.anomaliesResolved} ${PLURAL(cert.anomaliesResolved, 'anomalie', 'anomalies')} du dossier.`
+    const mentions =
+      cert.issuedAt || (completed && !cert.pathBCompleted)
+        ? [
+            cert.issuedAt ? `Parcours Comptabilité achevé le ${fmtDate(cert.issuedAt)}` : '',
+            completed && !cert.pathBCompleted
+              ? `poursuite de la formation : Audit externe — ${cert.modulesBCompleted}/${cert.modulesBTotal} modules validés`
+              : '',
+          ]
+            .filter(Boolean)
+            .join(' · ')
+        : ''
+    const statsLines = stats.map((s) => `${s.label} : ${s.value} (${s.hint})`)
+    return [
+      'ACCOUNTING & AUDIT SIMULATOR',
+      'Formation professionnelle — dossier pédagogique NOVATECH DISTRIBUTION SAS',
+      '',
+      'ATTESTATION DE FIN DE PARCOURS',
+      '',
+      body,
+      ...(mentions ? ['', mentions] : []),
+      '',
+      ...statsLines,
+      '',
+      `Fait le ${today}`,
+      `Le chef de mission — ${CHIEF_NAME}`,
+      '',
+      'Document généré localement par le simulateur — dossier fictif NOVATECH DISTRIBUTION SAS. ' +
+        'Cette attestation témoigne d’exercices réussis en environnement simulé : elle ne vaut ni diplôme, ' +
+        'ni certification professionnelle, et ne remplace pas la supervision d’un professionnel en situation réelle.',
+    ].join('\n')
+  }
+
+  // CHOIX D'ACTIVATION (F-8a) : « Copier » suit exactement la même règle que
+  // « Imprimer » — désactivé tant que le parcours A n'est pas terminé.
+  // L'aperçu verrouillé est volontairement flouté et son texte (« a suivi …
+  // en cours de validation ») ne vaut pas attestation : le copier porterait
+  // à confusion. Le bouton s'active donc au déblocage de l'impression.
+  const copyCertificate = async () => {
+    if (!completed) return
+    const text = certificatePlainText()
+    try {
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        await navigator.clipboard.writeText(text)
+      } else {
+        // Contexte non sécurisé ou API absente → on tente le repli ci-dessous.
+        throw new Error('Presse-papiers indisponible')
+      }
+    } catch {
+      // Repli textarea + execCommand('copy') ; toast d'erreur si même ce
+      // repli échoue (les deux méthodes ont échoué → aucune copie effectuée).
+      if (!legacyCopyText(text)) {
+        toast({
+          title: 'Copie impossible',
+          description:
+            'Le presse-papiers est inaccessible dans ce contexte — utilisez plutôt l’impression de l’attestation.',
+          variant: 'destructive',
+        })
+        return
+      }
+    }
+    toast({
+      title: 'Attestation copiée',
+      description: 'Le texte de l’attestation est dans le presse-papiers.',
+    })
+  }
+
   return (
     <Card className="print-avoid-break">
       <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 space-y-0">
         <CardTitle className="flex items-center gap-2 text-base">
           <Award className="size-4 text-primary" aria-hidden /> Attestation de fin de parcours
         </CardTitle>
-        <Button
-          variant="outline"
-          size="sm"
-          className="no-print gap-1.5"
-          onClick={printCertificate}
-          disabled={!completed}
-          aria-disabled={!completed}
-        >
-          <Printer className="size-3.5" aria-hidden /> Imprimer l&rsquo;attestation
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="no-print gap-1.5"
+            onClick={copyCertificate}
+            disabled={!completed}
+            aria-disabled={!completed}
+            title="Copier le texte de l’attestation dans le presse-papiers"
+          >
+            <Copy className="size-3.5" aria-hidden /> Copier
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="no-print gap-1.5"
+            onClick={printCertificate}
+            disabled={!completed}
+            aria-disabled={!completed}
+          >
+            <Printer className="size-3.5" aria-hidden /> Imprimer l&rsquo;attestation
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {completed ? (

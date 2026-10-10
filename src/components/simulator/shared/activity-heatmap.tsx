@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowUpRight, CalendarCheck, CheckCircle2, ChevronRight, Flame, X } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -20,6 +20,13 @@ import { useSimulator } from '@/lib/store/simulator-store'
 // le détail des tentatives du jour (requête /api/attempts?date=),
 // et chaque tentative est un lien direct vers l'exercice
 // (navigation → Parcours, module ouvert, exercice sélectionné).
+// F-8c : filtre par mode (guidé/mission/examen) du panneau du jour —
+//   l'état est { date, mode } : le mode effectif est DÉRIVÉ de la
+//   date courante, donc changer de journée retombe sur « Tous » sans
+//   aucun setState dans un effet (règle react-hooks/set-state-in-effect).
+// F-8d : accès direct « aujourd'hui » — chip cliquable (toggle du
+//   panneau du dernier jour) + raccourci clavier local « D » quand le
+//   focus est dans le composant (cf. handleRootKeyDown).
 // ============================================================
 
 export interface ActivityDay {
@@ -52,6 +59,21 @@ interface DayAttempt {
   usedHints: number
   criticalError: boolean
   attemptedAt: string
+}
+
+// F-8c — modes de tentative proposés en filtre du panneau du jour.
+type DayFilterMode = 'all' | 'guided' | 'mission' | 'exam'
+
+const MODE_LABELS: Record<Exclude<DayFilterMode, 'all'>, string> = {
+  guided: 'guidé',
+  mission: 'mission',
+  exam: 'examen',
+}
+
+/** Libellé français du mode d'une tentative (repli « guidé ») — réutilisé
+ *  par les lignes du panneau du jour et les messages/contreurs du filtre. */
+function modeLabel(mode: string): string {
+  return mode === 'exam' ? MODE_LABELS.exam : mode === 'mission' ? MODE_LABELS.mission : MODE_LABELS.guided
 }
 
 // Libellés de mois (calendrier français)
@@ -134,6 +156,16 @@ export function ActivityHeatmap({
   bestDay,
 }: ActivityHeatmapProps) {
   const [selected, setSelected] = useState<string | null>(null)
+  // F-8c — filtre par mode du panneau du jour, clé par date : le mode
+  // effectif est DÉRIVÉ (dayFilter.date === selected ? mode : 'all'),
+  // changer de journée retombe naturellement sur « Tous » sans le
+  // moindre setState dans un effet (règle react-hooks/set-state-in-effect).
+  const [dayFilter, setDayFilter] = useState<{ date: string; mode: DayFilterMode }>({ date: '', mode: 'all' })
+  // F-8d — horodatage du dernier « g » nu capté dans le composant :
+  // miroir local de l'armement des raccourcis globaux (g puis lettre,
+  // fenêtre ~900 ms) afin de céder « d » à la séquence de navigation
+  // quand elle vient d'être armée (cf. handleRootKeyDown).
+  const gArmedAtRef = useRef(0)
   const navigate = useSimulator((s) => s.navigate)
 
   // Détail des tentatives de la journée sélectionnée (drill-down)
@@ -153,6 +185,9 @@ export function ActivityHeatmap({
 
   const todayN = todayCount ?? today ?? 0
   const best = bestDay ?? days.reduce((m, d) => Math.max(m, d.count), 0)
+  // « aujourd'hui » = dernière entrée de days (convention du composant)
+  const todayDate = days[days.length - 1].date
+  const todayPanelOpen = selected === todayDate
 
   // Analyse locale des dates — jamais new Date(iso) : pivot UTC selon le fuseau
   const cells = days.map((d) => {
@@ -194,18 +229,88 @@ export function ActivityHeatmap({
     setSelected((cur) => (cur === date ? null : date))
   }
 
+  // ---- F-8c : vue filtrée du panneau du jour (état dérivé, zéro effet) ----
+  const filterMode: DayFilterMode = dayFilter.date === selected ? dayFilter.mode : 'all'
+  const dayAttempts = dayQuery.data?.attempts ?? []
+  const filteredAttempts =
+    filterMode === 'all' ? dayAttempts : dayAttempts.filter((a) => a.mode === filterMode)
+  const modeCounts: Record<Exclude<DayFilterMode, 'all'>, number> = { guided: 0, mission: 0, exam: 0 }
+  for (const a of dayAttempts) {
+    if (a.mode === 'guided' || a.mode === 'mission' || a.mode === 'exam') modeCounts[a.mode]++
+  }
+
+  // ---- F-8d : raccourci local « D » (aujourd'hui) ----
+  // POURQUOI un « d » nu est sûr : les raccourcis GLOBAUX
+  // (keyboard-shortcuts.tsx) sont soit des SÉQUENCES « g » puis lettre
+  // (≤ 900 ms), soit des touches isolées qui ne sont PAS « d » ([ ] / c ?
+  // F1 — aucun Alt+lettre n'existe dans l'app). Un « d » tapé seul ne peut
+  // donc déclencher aucune action globale. Seul cas d'intersection : « d »
+  // comme SECONDE touche d'une séquence « g d » armée — on reflète localement
+  // l'armement (gArmedAtRef) et on laisse alors filer la frappe vers le
+  // gestionnaire global (navigation Tableau de bord) au lieu d'ouvrir le panneau.
+  const handleRootKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    // Frappe dans un champ de saisie : ce n'est pas un raccourci.
+    const t = e.target as HTMLElement | null
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) {
+      return
+    }
+    // Modificateurs ou Maj : ce n'est plus un « d » nu (Ctrl/Cmd+D = favori,
+    // Alt+D… rien à faire ici — on garde la frappe pour le navigateur).
+    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return
+    if (e.key === 'g' || e.key === 'G') {
+      gArmedAtRef.current = Date.now()
+      return
+    }
+    if (e.key !== 'd' && e.key !== 'D') return
+    // Séquence « g d » en cours d'armement : la frappe appartient à la
+    // navigation globale — on ne consomme pas l'événement.
+    if (Date.now() - gArmedAtRef.current < 900) return
+    // Aucune tentative aujourd'hui : rien à ouvrir (le chip reste non cliquable).
+    if (todayN === 0) return
+    e.preventDefault()
+    toggleDay(todayDate)
+  }
+
   return (
-    <div className="activity-heatmap space-y-3">
+    <div
+      className="activity-heatmap space-y-3 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary/60"
+      tabIndex={0}
+      role="group"
+      aria-label="Assiduité — tentatives des 12 dernières semaines"
+      onKeyDown={handleRootKeyDown}
+    >
       {/* Chips de statistiques */}
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1">
           <Flame className="size-3.5 text-amber-600" aria-hidden />
           série : <span className="font-medium tabular-nums text-foreground">{streak}</span> jour{streak === 1 ? '' : 's'}
         </span>
-        <span className="flex items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1">
-          <CheckCircle2 className="size-3.5 text-emerald-600" aria-hidden />
-          aujourd'hui : <span className="font-medium tabular-nums text-foreground">{todayN}</span>
-        </span>
+        {/* F-8d — chip « aujourd'hui » : vrai bouton (toggle du panneau du
+            jour) dès qu'il y a une tentative ; sinon simple span informatif. */}
+        {todayN > 0 ? (
+          <button
+            type="button"
+            onClick={() => toggleDay(todayDate)}
+            aria-label={
+              todayPanelOpen
+                ? `Fermer le détail des ${todayN} tentative${todayN === 1 ? '' : 's'} d’aujourd’hui`
+                : `Voir les ${todayN} tentative${todayN === 1 ? '' : 's'} d’aujourd’hui`
+            }
+            className="flex items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1 transition-colors hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+          >
+            <CheckCircle2 className="size-3.5 text-emerald-600" aria-hidden />
+            aujourd'hui : <span className="font-medium tabular-nums text-foreground">{todayN}</span>
+          </button>
+        ) : (
+          <span
+            className="flex items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1"
+            title="Aucune tentative aujourd'hui"
+            aria-disabled="true"
+          >
+            <CheckCircle2 className="size-3.5 text-emerald-600" aria-hidden />
+            aujourd'hui : <span className="font-medium tabular-nums text-foreground">{todayN}</span>
+          </span>
+        )}
         <span className="flex items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1">
           <CalendarCheck className="size-3.5 text-primary" aria-hidden />
           jours actifs : <span className="font-medium tabular-nums text-foreground">{activeDays}</span>/{cells.length}
@@ -337,6 +442,11 @@ export function ActivityHeatmap({
         <span className="flex items-center gap-1">
           <ChevronRight className="size-3" aria-hidden /> clic sur une journée active : détail
         </span>
+        <span aria-hidden>·</span>
+        {/* F-8d — le raccourci local « D » (focus dans le composant) ouvre ou referme le panneau du jour */}
+        <span className="flex items-center gap-1">
+          touche <kbd className="rounded border bg-muted px-1 font-mono text-[10px]">D</kbd> : aujourd'hui
+        </span>
         {/* Lecture textuelle des seuils pour les lecteurs d'écran */}
         <ul className="sr-only">
           {LEVEL_HINTS.map((h, i) => (
@@ -352,14 +462,20 @@ export function ActivityHeatmap({
         <div
           role="region"
           aria-label={`Tentatives du ${fmtFR(selected)}`}
-          className="rounded-lg border bg-muted/20 p-3 text-sm"
+          className="panel-enter rounded-lg border bg-muted/20 p-3 text-sm"
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="font-medium capitalize">
               {fmtLongFR(selected)}
-              <span className="ml-2 font-normal text-muted-foreground">
-                {dayQuery.data ? `${dayQuery.data.attempts.length} tentative${dayQuery.data.attempts.length === 1 ? '' : 's'}` : ''}
-              </span>
+              {/* F-8c — compteur reflétant la vue filtrée : « X / Y » dès qu'un
+                  filtre actif restreint la liste (X = filtré, Y = total du jour). */}
+              {dayQuery.data ? (
+                <span className="ml-2 font-normal tabular-nums text-muted-foreground">
+                  {filterMode === 'all' || dayAttempts.length === 0
+                    ? `${dayAttempts.length} tentative${dayAttempts.length === 1 ? '' : 's'}`
+                    : `${filteredAttempts.length} / ${dayAttempts.length} tentative${filteredAttempts.length === 1 ? '' : 's'}`}
+                </span>
+              ) : null}
             </p>
             <button
               type="button"
@@ -373,6 +489,37 @@ export function ActivityHeatmap({
           <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
             Cliquez sur une tentative pour reprendre l’exercice dans le parcours d’apprentissage.
           </p>
+          {/* F-8c — chips de filtre par mode : compteur par mode, actif = teal.
+              Masquées pendant le chargement/en erreur ou si le jour est vide. */}
+          {!dayQuery.isPending && !dayQuery.isError && dayAttempts.length > 0 ? (
+            <div
+              className="mt-2 flex flex-wrap items-center gap-1.5"
+              role="group"
+              aria-label="Filtrer les tentatives par mode"
+            >
+              {(['all', 'guided', 'mission', 'exam'] as const).map((m) => {
+                const active = filterMode === m
+                const label = m === 'all' ? 'Tous' : MODE_LABELS[m]
+                const count = m === 'all' ? dayAttempts.length : modeCounts[m]
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setDayFilter({ date: selected, mode: m })}
+                    aria-pressed={active}
+                    className={
+                      'rounded-full border px-2 py-0.5 text-[11px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 ' +
+                      (active
+                        ? 'border-primary/40 bg-primary/10 font-medium text-primary'
+                        : 'border-border bg-muted/40 text-muted-foreground hover:border-primary/30 hover:bg-muted hover:text-foreground')
+                    }
+                  >
+                    {label} · <span className="tabular-nums">{count}</span>
+                  </button>
+                )
+              })}
+            </div>
+          ) : null}
           {dayQuery.isPending ? (
             <div className="mt-2 space-y-1.5">
               <Skeleton className="h-8 w-full" />
@@ -382,11 +529,15 @@ export function ActivityHeatmap({
             <p className="mt-2 text-xs text-red-700 dark:text-red-400">
               Impossible de charger les tentatives de cette journée.
             </p>
-          ) : dayQuery.data.attempts.length === 0 ? (
+          ) : dayAttempts.length === 0 ? (
             <p className="mt-2 text-xs text-muted-foreground">Aucune tentative enregistrée ce jour-là.</p>
+          ) : filteredAttempts.length === 0 ? (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Aucune tentative en mode {modeLabel(filterMode)} ce jour-là.
+            </p>
           ) : (
             <ul className="mt-2 max-h-56 space-y-1 overflow-y-auto pr-1 print-expand scroll-slim">
-              {dayQuery.data.attempts.map((a) => (
+              {filteredAttempts.map((a) => (
                 <li key={a.id}>
                   <button
                     type="button"
@@ -407,7 +558,7 @@ export function ActivityHeatmap({
                       <span className="font-medium text-amber-700 dark:text-amber-400">à retravailler</span>
                     )}
                     <span className="ml-auto flex items-center gap-2 text-muted-foreground">
-                      <span className="uppercase tracking-wide">{a.mode === 'exam' ? 'examen' : a.mode === 'mission' ? 'mission' : 'guidé'}</span>
+                      <span className="uppercase tracking-wide">{modeLabel(a.mode)}</span>
                       <span className="tabular-nums font-medium text-foreground">{Math.round(a.score * 100)} %</span>
                       <span className="tabular-nums">{fmtTime(a.attemptedAt)}</span>
                       <ArrowUpRight

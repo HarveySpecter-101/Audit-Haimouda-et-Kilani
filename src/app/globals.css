@@ -529,3 +529,30 @@ main th.truncate {
     border-color: #94a3b8 !important; /* slate-400 — ligne de signature */
   }
 }
+
+/* ============ F-8e — Polish détails (CR-7) ============ */
+
+/* Sparklines « Performance par module » : les points grossissent au
+   survol pour inviter à lire le tooltip natif <title> (propriété de
+   géométrie CSS r — Chrome/Edge/Firefox récents ; dégradation gracieuse :
+   le point reste à sa taille d'origine). */
+.module-spark circle {
+  transition: r 120ms ease;
+}
+.module-spark circle:hover {
+  r: 3.4px;
+}
+
+/* Apparition douce des panneaux de détail (panneau du jour de la
+   heatmap d'assiduité) — glissement vertical très court. */
+@keyframes panel-enter {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.panel-enter {
+  animation: panel-enter 0.18s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .panel-enter { animation: none; }
+  .module-spark circle { transition: none; }
+}

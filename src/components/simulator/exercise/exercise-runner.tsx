@@ -116,7 +116,6 @@ export function ExerciseRunner({ exercise }: { exercise: SafeExerciseData }) {
       })
       mutationRef.current?.mutate()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secondsLeft])
 
   const mutation = useMutation({

@@ -85,38 +85,62 @@ function emptyFieldNames(code: string, content: unknown): string[] {
     .map((f) => labels[f.id] ?? f.id)
 }
 
-function buildReviewComment(code: string, title: string, content: unknown): string {
+function buildReviewComment(code: string, title: string, content: unknown, rotation: number): string {
   const rule = catalogRule(code)
   const empty = emptyFieldNames(code, content)
   const filled = computeFieldsFilled(code, content)
   const total = totalFields(code)
   const parts: string[] = []
-  parts.push(
+  const openers = [
     `Revue du livrable « ${title} » (${code}). Règle de revue appliquée : ${rule}`,
-  )
+    `J’ai passé en revue « ${title} » (${code}) selon la règle convenue : ${rule}`,
+    `Note de revue — « ${title} » (${code}). Référence de contrôle : ${rule}`,
+  ]
+  parts.push(openers[rotation % openers.length])
   if (total === 0) {
-    parts.push('Aucun champ de modèle n\u2019est défini pour ce livrable : complétez librement et justifiez votre démarche.')
+    const noTemplate = [
+      'Aucun champ de modèle n’est défini pour ce livrable : complétez librement et justifiez votre démarche dans le corps du document.',
+      'Ce modèle est libre : structurez-le vous-même et appuyez chaque affirmation sur une pièce du dossier — c’est l’absence de cadre qui rend la justification décisive.',
+    ]
+    parts.push(noTemplate[rotation % noTemplate.length])
     return parts.join(' ')
   }
   if (empty.length === 0) {
-    parts.push(
+    const complete = [
       `Les ${total} champs sont renseignés (${filled}/${total}) : bon réflexe de complétude. Relisez-vous une fois à froid avant validation : un livrable professionnel se vérifie chiffre par chiffre contre la balance et les pièces.`,
-    )
+      `Complétude OK (${filled}/${total}). Avant de valider, faites la relecture croisée : chaque montant doit pouvoir être rapproché d’une écriture ou d’une pièce — sinon précisez la source d’estimation.`,
+      `Dossier complet (${filled}/${total} champs). Point d’attention de revue : la formulation. Un lecteur non comptable doit comprendre votre conclusion sans ouvrir la balance — testez-la en la relisant à voix haute.`,
+    ]
+    parts.push(complete[rotation % complete.length])
   } else {
-    parts.push(
-      `Champs non renseignés (${empty.length} sur ${total}) : ${empty.join(' ; ')}.`,
-    )
-    parts.push(
+    parts.push(`Champs non renseignés (${empty.length} sur ${total}) : ${empty.join(' ; ')}.`)
+    const incomplete = [
       'Un livrable incomplet ne peut pas passer en validation : complétez chaque champ avec des valeurs justifiées (issues des écritures, de la balance ou des pièces du dossier), puis soumettez à nouveau.',
-    )
+      `Je ne peux pas valider en l’état : ${empty.length} zone(s) restent vides. Une donnée manquante en cabinet se cherche — balance, grand livre, pièces justificatives — et se documente, jamais ne s’invente.`,
+      'Reprise nécessaire : les zones vides sont autant de questions sans réponse pour le lecteur. Renseignez-les à partir du dossier (et citez la pièce source), puis renvoyez pour seconde revue.',
+    ]
+    parts.push(incomplete[rotation % incomplete.length])
   }
+  // Observation pédagogique tournante (contexte dossier)
+  const coaching = [
+    'Rappel NEP 230 : la documentation des travaux doit permettre à un réviseur de comprendre la démarche sans vous appeler.',
+    'Rappel qualité : la traçabilité (qui a fait quoi, quand, sur quelle source) fait partie du livrable lui-même.',
+    'Rappel méthode : confrontez vos chiffres à la balance 6 colonnes avant de conclure — l’écart le plus fréquent en cabinet vient d’un total non rapproché.',
+    'Rappel forme : titres, unités et conventions monétaires cohérents d’un tableau à l’autre facilitent la revue et la réutilisation.',
+  ]
+  parts.push(coaching[rotation % coaching.length])
   return parts.join(' ')
 }
 
-function buildValidationComment(code: string, content: unknown): string {
+function buildValidationComment(code: string, content: unknown, rotation: number): string {
   const filled = computeFieldsFilled(code, content)
   const total = totalFields(code)
-  return `Livrable validé : ${filled}/${total} champs renseignés, cohérence vérifiée avec la règle de revue (« ${catalogRule(code)} »). Conservez ce document dans votre dossier de revue — la traçabilité des validations fait partie de la qualité professionnelle attendue.`
+  const variants = [
+    `Livrable validé : ${filled}/${total} champs renseignés, cohérence vérifiée avec la règle de revue (« ${catalogRule(code)} »). Conservez ce document dans votre dossier de revue — la traçabilité des validations fait partie de la qualité professionnelle attendue.`,
+    `Validation actée (${filled}/${total} champs). Points appréciés : complétude et conformité à la règle « ${catalogRule(code)} ». Prochaine étape : archivage dans le dossier permanent avec mention de la date et du validateur.`,
+    `OK pour validation — ${filled}/${total} champs, règle respectée (« ${catalogRule(code)} »). En cabinet réel, cette validation déclencherait la signature du cycle de revue : c’est le signe que le travail est défendable devant un tiers.`,
+  ]
+  return variants[rotation % variants.length]
 }
 
 function readVersions(raw: unknown): VersionEntry[] {
@@ -259,7 +283,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           { status: 422 },
         )
       }
-      const comment = buildReviewComment(deliverable.code, deliverable.title, deliverable.content)
+      const comment = buildReviewComment(deliverable.code, deliverable.title, deliverable.content, reviewerComments.length)
       const nextComments: ReviewerComment[] = [
         ...reviewerComments,
         { author: 'Chef de mission', comment, at: new Date().toISOString(), kind: 'REVIEW' as const },
@@ -307,7 +331,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           { status: 422 },
         )
       }
-      const comment = buildValidationComment(deliverable.code, deliverable.content)
+      const comment = buildValidationComment(deliverable.code, deliverable.content, reviewerComments.length)
       const nextComments: ReviewerComment[] = [
         ...reviewerComments,
         { author: 'Chef de mission', comment, at: new Date().toISOString(), kind: 'VALIDATION' as const },
@@ -341,12 +365,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (deliverable.status === 'TO_CORRECT') {
       return NextResponse.json({ error: 'Le livrable est déjà en correction.' }, { status: 422 })
     }
+    const reopenVariants = [
+      'Retour en correction : reprenez le livrable champ par champ à partir des commentaires de revue, appuyez-vous sur les données du dossier (écritures, balance, pièces) puis soumettez à nouveau. Une correction documentée vaut mieux qu’une correction rapide.',
+      'Réouverture demandée : la version soumise ne répond pas encore aux commentaires de revue. Corrigez en citant vos sources (pièces, écritures, normes), la traçabilité de la correction sera examinée à la prochaine revue.',
+      'Retour en correction — pourquoi ? Un livrable n’est pas « à peu près » fini : chaque remarque de revue doit être traitée explicitement. Reprenez, documentez, resoumettez.',
+    ]
     const nextComments: ReviewerComment[] = [
       ...reviewerComments,
       {
         author: 'Chef de mission',
-        comment:
-          'Retour en correction : reprenez le livrable champ par champ à partir des commentaires de revue, appuyez-vous sur les données du dossier (écritures, balance, pièces) puis soumettez à nouveau. Une correction documentée vaut mieux qu\u2019une correction rapide.',
+        comment: reopenVariants[reviewerComments.length % reopenVariants.length],
         at: new Date().toISOString(),
         kind: 'REOPEN' as const,
       },

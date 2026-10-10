@@ -1,7 +1,10 @@
 'use client'
 
+import { ShortcutsHelpButton } from '@/components/simulator/shell/keyboard-shortcuts'
+
 // ============================================================
 // Pied de page sticky (mt-auto) — mention pédagogique permanente
+// + accès aux raccourcis clavier
 // ============================================================
 
 export function FooterBar() {
@@ -13,9 +16,10 @@ export function FooterBar() {
           pédagogique fictif. Aucune donnée réelle. Contenu à but de formation : les règles (PCG, CGI, NEP)
           doivent être vérifiées sur les sources officielles pour un usage professionnel.
         </p>
-        <p className="tabular-nums shrink-0">
-          Exercice N 2024 · NOVATECH DISTRIBUTION SAS · France
-        </p>
+        <div className="flex shrink-0 items-center gap-3">
+          <ShortcutsHelpButton />
+          <p className="tabular-nums hidden sm:block">Exercice N 2024 · NOVATECH DISTRIBUTION SAS · France</p>
+        </div>
       </div>
     </footer>
   )

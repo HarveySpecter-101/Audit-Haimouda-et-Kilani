@@ -96,7 +96,14 @@ export const useSimulator = create<SimulatorState>()(
         hintLevel: 0,
       },
       bootstrapped: false,
-      navigate: (view, sub = null, params = {}) => set({ view, sub, params }),
+      navigate: (view, sub = null, params = {}) =>
+        set((s) => ({
+          view,
+          sub,
+          params,
+          // Deep-link module (ex. ?module=A5 depuis la recherche / le chef de mission)
+          ...(params.module ? { activeModule: params.module } : {}),
+        })),
       setMonth: (m) => set({ currentMonth: Math.max(1, Math.min(13, m)) }),
       setMode: (mode) => set({ mode }),
       setPathBUnlocked: (v) => set({ pathBUnlocked: v }),

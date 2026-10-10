@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { useSimulator } from '@/lib/store/simulator-store'
 import { useToast } from '@/hooks/use-toast'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -19,6 +19,9 @@ import { AnomalySeverityBadge, SectionTitle, StatCard, EmptyState } from '@/comp
 import { fmtEUR } from '@/lib/engine/format'
 import { round2 } from '@/lib/engine/double-entry'
 import type { AnomalyDTO } from '@/lib/types'
+import { useWorksheet } from '@/components/simulator/audit/worksheet-hooks'
+import type { Worksheet } from '@/components/simulator/audit/worksheet-hooks'
+import { SamplingTool } from '@/components/simulator/audit/sampling-tool'
 import {
   AlertTriangle,
   BadgeCheck,
@@ -56,17 +59,6 @@ const SECTIONS = [
   { id: 'finalisation', label: 'Finalisation' },
   { id: 'rapport', label: 'Rapport' },
 ]
-
-interface Worksheet {
-  materiality?: { base: string; rate: number; seuil: number; planification: number; remontee: number; justification: string }
-  risks?: { id: string; risk: string; assertion: string; accounts: string; response: string; level: string; sam: boolean }[]
-  confirmations?: { aux: string; solde: number; status: string; note: string }[]
-  finalization?: { events: string; continuity: string; declarations: boolean; reviewDone: boolean; suspens: string; note: string }
-  cyclesState?: Record<string, { feuille: boolean; revue: boolean }>
-  sampling?: { population: number; taille: number; refs: string[] }
-  misstatements?: { id: string; desc: string; amount: number; corrected: boolean; incidence: string }[]
-  report?: { opinionType: string; motives: string; text?: string }
-}
 
 const ASSERTIONS = ['Existence', 'Exhaustivité', 'Évaluation', 'Séparation des exercices', 'Réalité des opérations', 'Droits et obligations', 'Présentation']
 
@@ -120,38 +112,6 @@ export default function AuditView() {
       {section === 'rapport' ? <ReportSection /> : null}
     </div>
   )
-}
-
-// ---------- hook partagé de sauvegarde du worksheet ----------
-
-function useWorksheet() {
-  const queryClient = useQueryClient()
-  const { toast } = useToast()
-  const ws = useQuery<{ worksheet: Worksheet }>({
-    queryKey: ['audit-worksheet'],
-    queryFn: async () => {
-      const res = await fetch('/api/audit-worksheet')
-      if (!res.ok) throw new Error('Erreur')
-      return res.json()
-    },
-  })
-  const save = useMutation({
-    mutationFn: async (payload: { section: string; data: unknown }) => {
-      const res = await fetch('/api/audit-worksheet', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      if (!res.ok) throw new Error('Erreur de sauvegarde')
-      return res.json()
-    },
-    onSuccess: () => {
-      toast({ title: 'Feuille sauvegardée' })
-      queryClient.invalidateQueries({ queryKey: ['audit-worksheet'] })
-    },
-    onError: () => toast({ title: 'Sauvegarde impossible', variant: 'destructive' }),
-  })
-  return { ws, save }
 }
 
 // ==================== SYNTHÈSE ====================
@@ -409,23 +369,6 @@ function CyclesSection() {
   const { ws, save } = useWorksheet()
   const state = ws.data?.worksheet.cyclesState ?? {}
   const [cyclesState, setCyclesState] = useState<Record<string, { feuille: boolean; revue: boolean }>>(state)
-  const sales = useQuery<{ entries: { pieceRef: string; id: string }[]; total: number }>({
-    queryKey: ['sales-population'],
-    queryFn: async () => {
-      const res = await fetch('/api/entries?journal=VTE&limit=300')
-      if (!res.ok) throw new Error('Erreur')
-      return res.json()
-    },
-  })
-  const [sampleSize, setSampleSize] = useState('25')
-  const [sample, setSample] = useState<string[]>(ws.data?.worksheet.sampling?.refs ?? [])
-
-  const generateSample = () => {
-    const pop = (sales.data?.entries ?? []).map((e) => e.pieceRef)
-    const n = Math.min(Number(sampleSize) || 25, pop.length)
-    const picked = [...pop].sort(() => Math.random() - 0.5).slice(0, n)
-    setSample(picked)
-  }
 
   return (
     <div className="space-y-4">
@@ -463,39 +406,7 @@ function CyclesSection() {
       <Button size="sm" className="gap-1.5" onClick={() => save.mutate({ section: 'cyclesState', data: cyclesState })} disabled={save.isPending}>
         <Save className="size-3.5" /> Sauvegarder l’état des cycles
       </Button>
-      <Card>
-        <CardHeader><CardTitle className="text-sm">Échantillonnage du cycle ventes (NEP 530)</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="w-40 space-y-1">
-              <Label className="text-xs">Taille d’échantillon</Label>
-              <Input value={sampleSize} onChange={(e) => setSampleSize(e.target.value)} inputMode="numeric" />
-            </div>
-            <div className="text-sm">
-              <p className="text-xs text-muted-foreground">Population (factures VTE)</p>
-              <p className="tabular-nums font-semibold">{sales.data?.total ?? '—'} factures</p>
-            </div>
-            <Button size="sm" onClick={generateSample} disabled={sales.isLoading}>Sélection aléatoire</Button>
-            <Button size="sm" variant="outline" onClick={() => save.mutate({ section: 'sampling', data: { population: sales.data?.total ?? 0, taille: Number(sampleSize) || 25, refs: sample } })}>
-              Sauvegarder
-            </Button>
-          </div>
-          {sample.length ? (
-            <ScrollArea className="max-h-40 rounded-md border">
-              <ul className="grid grid-cols-2 gap-1 p-2 text-xs sm:grid-cols-4">
-                {sample.map((ref) => (
-                  <li key={ref} className="rounded bg-muted px-2 py-1 font-mono">{ref}</li>
-                ))}
-              </ul>
-            </ScrollArea>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              La sélection aléatoire tire réellement dans les {sales.data?.total ?? '—'} factures de ventes du dossier —
-              documentez la méthode et les résultats de vos tests ligne à ligne.
-            </p>
-          )}
-        </CardContent>
-      </Card>
+      <SamplingTool />
     </div>
   )
 }

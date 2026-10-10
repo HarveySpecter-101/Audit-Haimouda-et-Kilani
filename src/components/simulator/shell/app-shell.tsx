@@ -7,6 +7,7 @@ import { Sidebar } from '@/components/simulator/shell/sidebar'
 import { Topbar } from '@/components/simulator/shell/topbar'
 import { FooterBar } from '@/components/simulator/shell/footer-bar'
 import { ChiefWindow } from '@/components/simulator/chief/chief-window'
+import { KeyboardShortcuts } from '@/components/simulator/shell/keyboard-shortcuts'
 import { ActiveView } from '@/components/simulator/views/registry'
 
 // ============================================================
@@ -88,6 +89,7 @@ export function AppShell() {
         <FooterBar />
       </div>
       <ChiefWindow />
+      <KeyboardShortcuts />
     </div>
   )
 }

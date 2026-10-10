@@ -68,23 +68,16 @@ function taskKeyForModule(moduleCode: string): string | undefined {
 }
 
 export default function LearningView() {
-  const { sub, params, pathBUnlocked, setPathBUnlocked, activeModule, setActiveModule, navigate, openChief } =
+  const { sub, pathBUnlocked, setPathBUnlocked, activeModule, setActiveModule, navigate, openChief } =
     useSimulator()
   const queryClient = useQueryClient()
   const { toast } = useToast()
 
   const [tab, setTab] = useState<'A' | 'B'>(sub === 'b' ? 'B' : 'A')
-  const [selectedModule, setSelectedModule] = useState<string | null>(activeModule)
   const [selectedExercise, setSelectedExercise] = useState<string | null>(null)
-
-  // Deep-link : ?module=A5 (fenêtre chef / dashboard)
-  useEffect(() => {
-    if (params?.module) {
-      setSelectedModule(params.module)
-      setActiveModule(params.module)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params?.module])
+  // Module sélectionné : source unique = activeModule (deep-link géré par
+  // navigate({module}) dans le store — pas d'état local synchronisé)
+  const selectedModule = activeModule
 
   const boot = useQuery<BootstrapLite>({
     queryKey: ['bootstrap-lite'],
@@ -161,7 +154,6 @@ export default function LearningView() {
         syncStatus.mutate({ moduleCode: m.code, status: 'COMPLETED', score: Math.round(stat.score * 100) / 100 })
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attempts.data, boot.data, moduleStats])
 
   // Déblocage du parcours B : automatique une fois, avec message
@@ -192,7 +184,6 @@ export default function LearningView() {
       unlockTriggered.current = true
       unlockB.mutate()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allACompleted, pathBUnlocked, boot.data])
 
   const globalScore = useMemo(() => {
@@ -224,9 +215,8 @@ export default function LearningView() {
           selectedExercise={selectedExercise}
           onSelectExercise={setSelectedExercise}
           onBack={() => {
-            setSelectedModule(null)
-            setSelectedExercise(null)
             setActiveModule(null)
+            setSelectedExercise(null)
           }}
           onLessonRead={(lessonId) =>
             syncStatus.mutate({ moduleCode: mod.code, lessonsRead: [lessonId], status: 'IN_PROGRESS' })
@@ -284,9 +274,8 @@ export default function LearningView() {
             modules={MODULES_A_FULL}
             stats={moduleStats}
             onSelect={(code) => {
-              setSelectedModule(code)
-              setSelectedExercise(null)
               setActiveModule(code)
+              setSelectedExercise(null)
             }}
           />
         </TabsContent>
@@ -296,9 +285,8 @@ export default function LearningView() {
               modules={MODULES_B_FULL}
               stats={moduleStats}
               onSelect={(code) => {
-                setSelectedModule(code)
-                setSelectedExercise(null)
                 setActiveModule(code)
+                setSelectedExercise(null)
               }}
             />
           ) : (

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { useSimulator, VIEW_LABELS } from '@/lib/store/simulator-store'
 import { monthLabel } from '@/lib/engine/vat'
 import { Button } from '@/components/ui/button'
@@ -15,13 +15,38 @@ import {
   CommandList,
 } from '@/components/ui/command'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ChevronLeft, ChevronRight, Menu, Search } from 'lucide-react'
+import { useTheme } from 'next-themes'
+import { BookOpen, ChevronLeft, ChevronRight, GraduationCap, Lightbulb, Menu, Moon, Search, Sun, Timer, UserCheck } from 'lucide-react'
 import { ALL_MODULES } from '@/lib/data/module-codes'
 
 // ============================================================
-// Barre supérieure : fil d'Ariane, mois courant, recherche globale
+// Barre supérieure : fil d'Ariane, mois courant, recherche
+// globale, thème clair/sombre/système et mode d'apprentissage
+// documenté (guidé / mission / examen).
 // ============================================================
+
+const MODES: Record<string, { label: string; icon: typeof Lightbulb; pitch: string; detail: string }> = {
+  guided: {
+    label: 'Mode guidé',
+    icon: Lightbulb,
+    pitch: 'Apprentissage accompagné — entraide disponible.',
+    detail: 'Indices du chef de mission accessibles (3 niveaux progressifs), exemple corrigé consultable après chaque tentative, aucun chronomètre. Idéal pour découvrir les notions et se constituer des repères méthodologiques.',
+  },
+  mission: {
+    label: 'Mode mission',
+    icon: UserCheck,
+    pitch: 'Autonomie encadrée — comme en cabinet.',
+    detail: 'Vous travaillez seul sur le dossier NOVATECH, comme un collaborateur junior : la fenêtre du chef de mission reste disponible mais chaque indice utilisé peut réduire la reconnaissance de la compétence évaluée. Résolution des anomalies et production des livrables attendus.',
+  },
+  exam: {
+    label: 'Mode examen',
+    icon: Timer,
+    pitch: 'Évaluation chronométrée — conditions d’examen.',
+    detail: 'Chaque exercice est chronométré selon sa difficulté (3 min / 7 min / 15 min), les indices sont désactivés et la soumission est automatique à l’écoulement du temps. Les tentatives comptent pleinement pour l’évaluation des compétences.',
+  },
+}
 
 export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
   const view = useSimulator((s) => s.view)
@@ -33,6 +58,18 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
   const navigate = useSimulator((s) => s.navigate)
   const activeModule = useSimulator((s) => s.activeModule)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [modeInfoOpen, setModeInfoOpen] = useState(false)
+  const { theme, setTheme } = useTheme()
+  // Détection d'hydration sans setState-in-effect : true après le premier
+  // rendu client, false pendant le SSR / la première hydratation.
+  const emptySubscribe = () => () => {}
+  const mounted = useSyncExternalStore(emptySubscribe, () => true, () => false)
+  // Raccourci clavier « / » → ouvre la recherche globale
+  useEffect(() => {
+    const open = () => setSearchOpen(true)
+    window.addEventListener('sim:open-search', open)
+    return () => window.removeEventListener('sim:open-search', open)
+  }, [])
 
   const viewLabel = VIEW_LABELS[view]
 
@@ -43,7 +80,7 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
 
   return (
     <header className="no-print sticky top-0 z-30 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85">
-      <div className="flex h-14 items-center gap-2 px-3 sm:px-4">
+      <div className="flex min-h-14 flex-wrap items-center gap-x-2 gap-y-1.5 px-3 py-2 sm:h-14 sm:flex-nowrap sm:gap-y-0 sm:py-0 sm:px-4">
         <Button variant="ghost" size="icon" className="lg:hidden" onClick={onOpenMobile} aria-label="Ouvrir la navigation">
           <Menu className="size-5" />
         </Button>
@@ -78,7 +115,7 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
             ) : null}
           </BreadcrumbList>
         </Breadcrumb>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
           <Button
             variant="outline"
             size="sm"
@@ -89,12 +126,22 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
             <Search className="size-4" />
             <span className="hidden md:inline text-xs text-muted-foreground">Rechercher…</span>
           </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            className="size-8"
+            aria-label="Basculer le thème clair/sombre"
+            title="Thème : clair / sombre / système"
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          >
+            {mounted && theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
+          </Button>
           <div className="flex items-center gap-1">
             <Button variant="outline" size="icon" className="size-8" onClick={() => setMonth(currentMonth - 1)} disabled={currentMonth <= 1} aria-label="Mois précédent">
               <ChevronLeft className="size-4" />
             </Button>
-            <div className="min-w-24 text-center">
-              <Badge variant={currentMonth === 13 ? 'secondary' : 'default'} className="font-medium">
+            <div className="min-w-0 text-center">
+              <Badge variant={currentMonth === 13 ? 'secondary' : 'default'} className="px-1.5 font-medium sm:min-w-24">
                 {monthLabel(currentMonth)} 2024
               </Badge>
             </div>
@@ -102,16 +149,69 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
               <ChevronRight className="size-4" />
             </Button>
           </div>
-          <Select value={mode} onValueChange={(v) => setMode(v as 'guided' | 'mission' | 'exam')}>
-            <SelectTrigger className="h-8 w-40 text-xs" aria-label="Mode d'apprentissage">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="guided">Mode guidé</SelectItem>
-              <SelectItem value="mission">Mode mission</SelectItem>
-              <SelectItem value="exam">Mode examen</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-1">
+            <Select value={mode} onValueChange={(v) => setMode(v as 'guided' | 'mission' | 'exam')}>
+              <SelectTrigger className="h-8 w-[128px] text-xs sm:w-40" aria-label="Mode d'apprentissage">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(MODES).map(([value, m]) => (
+                  <SelectItem key={value} value={value}>{m.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Popover open={modeInfoOpen} onOpenChange={setModeInfoOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8"
+                  aria-label="Que signifient les modes d'apprentissage ?"
+                  title="Comprendre les modes"
+                >
+                  <BookOpen className="size-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-96">
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold">Trois modes, une même progression</p>
+                    <p className="text-xs text-muted-foreground">
+                      Le mode change les conditions de travail, pas le contenu : les mêmes modules, exercices et
+                      livrables restent accessibles. Choisissez selon votre objectif du moment.
+                    </p>
+                  </div>
+                  {Object.entries(MODES).map(([value, m]) => {
+                    const Icon = m.icon
+                    const active = mode === value
+                    return (
+                      <button
+                        key={value}
+                        className={`w-full rounded-lg border p-3 text-left transition-colors hover:bg-accent/50 ${active ? 'border-primary/60 bg-primary/5' : ''}`}
+                        onClick={() => {
+                          setMode(value as 'guided' | 'mission' | 'exam')
+                          setModeInfoOpen(false)
+                        }}
+                      >
+                        <p className="flex items-center gap-2 text-sm font-medium">
+                          <Icon className="size-4 text-primary" />
+                          {m.label}
+                          {active ? <Badge variant="secondary" className="ml-auto text-[10px]">Actif</Badge> : null}
+                        </p>
+                        <p className="mt-1 text-xs font-medium text-foreground/80">{m.pitch}</p>
+                        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{m.detail}</p>
+                      </button>
+                    )
+                  })}
+                  <p className="flex items-start gap-1.5 rounded-md bg-muted/60 p-2 text-[11px] leading-relaxed text-muted-foreground">
+                    <GraduationCap className="mt-0.5 size-3.5 shrink-0" />
+                    Conseil pédagogique : commencez en mode guidé sur les modules inconnus, passez en mode mission
+                    pour ancrer les réflexes, et réservez le mode examen pour mesurer votre niveau en conditions réelles.
+                  </p>
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
         </div>
       </div>
       <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />

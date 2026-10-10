@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 
 // ============================================================
@@ -15,7 +16,8 @@ const WORKSHEET_KEY = 'auditWorksheet'
 const ALLOWED_SECTIONS = new Set([
   'materiality',
   'risks',
-  'cycles',
+  'cyclesState',
+  'sampling',
   'confirmations',
   'misstatements',
   'finalization',
@@ -43,8 +45,8 @@ async function writeSection(section: string, data: unknown) {
   const merged: Record<string, unknown> = { ...worksheet, [section]: data ?? null }
   const saved = await db.setting.upsert({
     where: { key: WORKSHEET_KEY },
-    update: { value: merged },
-    create: { key: WORKSHEET_KEY, value: merged },
+    update: { value: merged as Prisma.InputJsonValue },
+    create: { key: WORKSHEET_KEY, value: merged as Prisma.InputJsonValue },
   })
   return { worksheet: saved.value as Record<string, unknown>, savedAt: saved.updatedAt }
 }

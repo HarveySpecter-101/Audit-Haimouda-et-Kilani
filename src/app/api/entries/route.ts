@@ -15,16 +15,32 @@ export async function GET(request: Request) {
     const accountCode = url.searchParams.get('account') ?? undefined
     const entries = await getEntriesWithLines({
       journal,
-      month: month ? Number(month) : undefined,
+      month: month && month !== 'all' ? Number(month) : undefined,
       q,
       limit,
       offset,
       accountCode,
     })
+    // Le décompte total DOIT appliquer les mêmes filtres que la liste
+    // (journal + recherche + mois), sinon la pagination ment.
+    const monthNum = month && month !== 'all' ? Number(month) : undefined
     const total = await db.entry.count({
       where: {
         ...(journal ? { journal } : {}),
         ...(q ? { OR: [{ pieceRef: { contains: q } }, { label: { contains: q } }] } : {}),
+        ...(accountCode ? { lines: { some: { accountCode } } } : {}),
+        ...(monthNum
+          ? {
+              date: {
+                gte: new Date(`2024-${String(monthNum).padStart(2, '0')}-01T00:00:00.000Z`),
+                lt: new Date(
+                  monthNum === 12
+                    ? `2025-01-01T00:00:00.000Z`
+                    : `2024-${String(monthNum + 1).padStart(2, '0')}-01T00:00:00.000Z`,
+                ),
+              },
+            }
+          : {}),
       },
     })
     return NextResponse.json({ entries, total })

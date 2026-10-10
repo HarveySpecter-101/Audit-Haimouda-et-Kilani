@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ViewSkeleton, SectionTitle, StatCard, ProgressPct, EmptyState } from '@/components/simulator/shared/ui-bits'
 import { StageReport, type DeliverableLite, type ProgressLite, type AttemptLite } from '@/components/simulator/assessment/stage-report'
+import { CertificateCard, type CertificateData } from '@/components/simulator/assessment/certificate-card'
 import { useSimulator } from '@/lib/store/simulator-store'
 import { moduleTitle } from '@/lib/data/module-codes'
 import { fmtDate } from '@/lib/engine/format'
@@ -69,6 +70,8 @@ interface SafeExerciseDTO {
 interface BootstrapData {
   progress: ProgressLite[]
   competencies: CompetencyDTO[]
+  /** Bloc calculé serveur pour l’attestation de fin de parcours. */
+  certificate?: CertificateData
 }
 
 interface AttemptsData {
@@ -86,9 +89,13 @@ export default function AssessmentView() {
   const [showReport, setShowReport] = useState(false)
 
   const boot = useQuery<BootstrapData>({
+    // Clé conservée (« assessment-bootstrap ») : elle figure dans la liste
+    // d’invalidation de cache du data-management-card (paramètres → reset).
+    // /api/progress renvoie { progress, competencies, certificate } : même
+    // forme que bootstrap pour les champs consommés ici, plus l’attestation.
     queryKey: ['assessment-bootstrap'],
     queryFn: async () => {
-      const res = await fetch('/api/bootstrap')
+      const res = await fetch('/api/progress')
       if (!res.ok) throw new Error('Erreur de chargement')
       return res.json()
     },
@@ -472,6 +479,9 @@ export default function AssessmentView() {
           )}
         </CardContent>
       </Card>
+
+      {/* ---------- Attestation de fin de parcours ---------- */}
+      <CertificateCard certificate={boot.data?.certificate} />
 
       {/* ---------- Rapport de préparation au stage ---------- */}
       <Card>

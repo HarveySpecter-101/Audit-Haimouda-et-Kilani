@@ -10,6 +10,7 @@ import { getAppState } from '@/lib/server/queries'
 //   - Livrables → BLANK, contenu vierge, sans commentaires
 //   - Anomalies → OPEN sans résolution
 //   - Rapprochements bancaires → en cours, vides
+//   - Réussites (achievementsState/achievementsSeen) effacées
 //   - appState.pathBUnlocked = false
 // Les écritures du dossier (entry/entryLine/documents…) ne sont
 // JAMAIS touchées : seule la progression est réinitialisée.
@@ -45,6 +46,11 @@ export async function POST(request: Request) {
       })
       await tx.bankReconciliation.updateMany({
         data: { status: 'IN_PROGRESS', matchedLines: [], notes: null },
+      })
+      // Réussites : les déblocages et accusés de notification repartent de zéro
+      // (les badges se recalculent depuis la progression réinitialisée).
+      await tx.setting.deleteMany({
+        where: { key: { in: ['achievementsState', 'achievementsSeen'] } },
       })
     })
 

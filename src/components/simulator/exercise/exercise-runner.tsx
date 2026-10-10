@@ -140,6 +140,9 @@ export function ExerciseRunner({ exercise }: { exercise: SafeExerciseData }) {
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       queryClient.invalidateQueries({ queryKey: ['attempts'] })
       queryClient.invalidateQueries({ queryKey: ['progress'] })
+      // Les tentatives comptent pour les réussites (assiduité, 10 exercices…) :
+      // on demande au surveillant global de recalculer les déblocages.
+      window.dispatchEvent(new CustomEvent('sim:achievements-refresh'))
       if (data.feedback.passed) {
         toast({ title: 'Exercice réussi', description: `Score : ${Math.round(data.feedback.score * 100)} %` })
       } else {

@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import { VIEW_LABELS } from '@/lib/store/simulator-store'
 import { StatCard, SectionTitle, ProgressPct, AnomalySeverityBadge } from '@/components/simulator/shared/ui-bits'
 import { ModuleProgressBars, VatBarsMini, DonutScore } from '@/components/simulator/shared/mini-charts'
+import { ActivityHeatmap } from '@/components/simulator/shared/activity-heatmap'
 import { AchievementsPanel } from '@/components/simulator/shared/achievements-panel'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -21,6 +22,7 @@ import {
   BookOpen,
   Briefcase,
   Calculator,
+  CalendarCheck,
   CheckCircle2,
   ClipboardList,
   FileWarning,
@@ -56,6 +58,14 @@ interface DashboardData {
   alerts: { openAnomalies: number; highAnomalies: number; docsPending: number }
   tasks: MissionTask[]
   recentAttempts: { exerciseKey: string; score: number; passed: boolean; attemptedAt: string; moduleCode: string }[]
+  activity: {
+    days: { date: string; count: number }[]
+    total: number
+    activeDays: number
+    today: number
+    bestDay: number
+    streak: number
+  }
 }
 
 interface BootstrapData {
@@ -337,6 +347,18 @@ export default function DashboardView() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Assiduité — heatmap des tentatives sur les 12 dernières semaines */}
+      <Card className="print-avoid-break">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <CalendarCheck className="size-4 text-primary" /> Assiduité — 12 dernières semaines
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {d?.activity ? <ActivityHeatmap {...d.activity} /> : <Skeleton className="h-40" />}
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Alertes */}

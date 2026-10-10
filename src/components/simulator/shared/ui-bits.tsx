@@ -126,18 +126,28 @@ export function ViewSkeleton() {
 
 export function EmptyState({ title, description, icon }: { title: string; description?: string; icon?: ReactNode }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-10 text-center">
-      <div className="text-muted-foreground">{icon}</div>
-      <p className="font-medium">{title}</p>
-      {description ? <p className="max-w-md text-sm text-muted-foreground">{description}</p> : null}
+    <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed bg-muted/20 p-10 text-center">
+      {icon ? (
+        <div className="flex size-12 items-center justify-center rounded-full border bg-card text-muted-foreground shadow-sm">
+          {icon}
+      </div>
+      ) : null}
+      <div className="space-y-1">
+        <p className="font-medium">{title}</p>
+        {description ? <p className="mx-auto max-w-md text-sm leading-relaxed text-muted-foreground">{description}</p> : null}
+      </div>
     </div>
   )
 }
 
 export function SectionTitle({ children, sub }: { children: ReactNode; sub?: string }) {
   return (
-    <div className="space-y-1">
-      <h2 className="text-lg font-semibold tracking-tight">{children}</h2>
+    <div className="space-y-1.5">
+      <div className="space-y-1">
+        <h2 className="text-lg font-semibold tracking-tight">{children}</h2>
+        {/* Filet d'accent « cabinet » sous le titre de section */}
+        <div aria-hidden className="h-1 w-10 rounded-full bg-primary/70" />
+      </div>
       {sub ? <p className="text-sm text-muted-foreground">{sub}</p> : null}
     </div>
   )

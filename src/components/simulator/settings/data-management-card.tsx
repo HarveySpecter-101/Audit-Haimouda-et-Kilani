@@ -58,9 +58,11 @@ export function DataManagementCard() {
   const [resetWord, setResetWord] = useState('')
 
   const invalidateAll = () => {
-    for (const key of ['bootstrap', 'dashboard', 'documents', 'anomalies', 'calendar', 'calendar-view', 'deliverables', 'assessment-attempts', 'assessment-bootstrap', 'client-space-bootstrap', 'assessment-exams-A', 'assessment-exams-B', 'assessment-deliverables', 'documents-anomalies', 'deliverables-stats']) {
+    for (const key of ['bootstrap', 'dashboard', 'documents', 'anomalies', 'calendar', 'calendar-view', 'deliverables', 'assessment-attempts', 'assessment-bootstrap', 'client-space-bootstrap', 'assessment-exams-A', 'assessment-exams-B', 'assessment-deliverables', 'documents-anomalies', 'deliverables-stats', 'achievements']) {
       queryClient.invalidateQueries({ queryKey: [key] })
     }
+    // Les données de progression ont changé : les réussites aussi.
+    window.dispatchEvent(new CustomEvent('sim:achievements-refresh'))
   }
 
   // ---------- Export JSON ----------

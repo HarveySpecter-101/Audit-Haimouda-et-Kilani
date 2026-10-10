@@ -407,3 +407,114 @@ kbd {
 .toast-slide-in {
   animation: toast-slide-in 0.3s cubic-bezier(0.2, 0.8, 0.3, 1);
 }
+
+/* ============ Correctifs responsive (revue continue 4 — mobile 375 px) ============ */
+
+/* Anti-« piste de grille dilatée » : un contenu non réductible (truncate,
+   line-clamp, nowrap, viewport ScrollArea) ne doit jamais agrandir la piste
+   d'une grille au-delà du conteneur — sinon toute la page déborde.
+   min-width: 0 sur les enfants directs des grilles laisse les pistes 1fr /
+   implicites respecter la largeur du conteneur ; le contenu interne
+   (déjà doté de truncate / min-w-0) se tronque proprement. */
+main .grid > * {
+  min-width: 0;
+}
+
+/* Listes d'onglets : jamais plus larges que leur conteneur — défilement
+   horizontal natif (métadonnées longues des parcours A/B, cycles…) */
+[data-slot='tabs-list'] {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+[data-slot='tabs-trigger'] {
+  flex-shrink: 0;
+}
+
+/* Tableaux de données : plafonnés à la largeur du conteneur. Les cellules
+   tronquées conservent leurs points de suspension ; les tableaux prévus
+   larges (min-w) restent dans leur coquille overflow-x-auto dédiée. */
+main table {
+  max-width: 100%;
+}
+main td.truncate,
+main th.truncate {
+  max-width: 64vw;
+}
+
+/* ============ Polish visuel v5 (revue continue 4) ============ */
+
+/* Squelettes de chargement : balayage lumineux discret (en plus de
+   l'opacity pulse), façon « cabinet » — coupé en mode réduit. */
+[data-slot='skeleton'] {
+  position: relative;
+  overflow: hidden;
+}
+[data-slot='skeleton']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklch, var(--background) 65%, transparent),
+    transparent
+  );
+  animation: skeleton-sweep 1.8s ease-in-out infinite;
+}
+@keyframes skeleton-sweep {
+  100% { transform: translateX(100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-slot='skeleton']::after { animation: none; }
+}
+
+/* ============ Attestation de fin de parcours — impression isolée ============ */
+/* Le bouton « Imprimer l'attestation » pose data-print-mode="certificate"
+   sur <body> avant window.print() et le retire après (afterprint + 1 s).
+   Les règles sont donc STRICTEMENT conditionnées à cet attribut : aucun
+   impact sur les autres flux d'impression (feuille d'échantillonnage,
+   états financiers, rapport de stage). */
+@media print {
+  body[data-print-mode='certificate'] * {
+    visibility: hidden !important;
+  }
+  body[data-print-mode='certificate'] .print-cert-root,
+  body[data-print-mode='certificate'] .print-cert-root * {
+    visibility: visible !important;
+  }
+  /* Le document occupe seul la page (A4, marges @page existantes) et tient
+     sur une seule page : centré, insécable, débordement masqué. */
+  body[data-print-mode='certificate'] .print-cert-root {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    break-inside: avoid;
+    font-size: 11.5pt;
+    line-height: 1.45;
+  }
+  /* Impression sobre et lisible quel que soit le thème actif (clair/sombre) :
+     encadré sur fond blanc, texte sombre, fonds internes neutralisés
+     (les séparateurs shadcn conservent leur trait). */
+  body[data-print-mode='certificate'] .print-cert-frame,
+  body[data-print-mode='certificate'] .print-cert-doc {
+    background: white !important;
+    box-shadow: none !important;
+  }
+  body[data-print-mode='certificate'] .print-cert-doc {
+    color: #334155 !important; /* slate-700 */
+  }
+  body[data-print-mode='certificate'] .print-cert-doc *:not([data-slot='separator']) {
+    background-color: transparent !important;
+  }
+  body[data-print-mode='certificate'] .print-cert-doc .text-muted-foreground {
+    color: #64748b !important; /* slate-500 */
+  }
+  body[data-print-mode='certificate'] .print-cert-doc .border-foreground\/30 {
+    border-color: #94a3b8 !important; /* slate-400 — ligne de signature */
+  }
+}

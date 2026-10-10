@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { upsertAppState } from '@/lib/server/queries'
+import { MODULES_A, MODULES_B } from '@/lib/data/module-codes'
+import { exercisesStats } from '@/lib/data/exercises'
+import type { CertificateData } from '@/components/simulator/assessment/certificate-card'
 
 // ============================================================
 // API PROGRESSION DU PARCOURS
-// GET   → { progress, competencies }
+// GET   → { progress, competencies, certificate }
+//         certificate : bloc calculé serveur pour l'attestation
+//         de fin de parcours (vue Évaluation).
 // PATCH → { moduleCode, lessonsRead?, status?, score? } (upsert)
 //       | { action: 'unlock-path-b' } → appState.pathBUnlocked = true
 // Renvoie { progress, unlocked? } après chaque écriture.
@@ -16,11 +21,76 @@ function pathOfModule(moduleCode: string): 'A' | 'B' {
   return moduleCode.startsWith('B') ? 'B' : 'A'
 }
 
+// Nom affiché sur l'attestation quand aucun profil n'est renseigné
+// (aucune notion de profil n'existe aujourd'hui dans l'application —
+// le paramètre Settings n'offre pas de renommage : voir settings-view).
+const DEFAULT_LEARNER_NAME = 'Collaborateur stagiaire'
+
+/** Extrait un nom d'apprenant exploitable d'un Setting « profile » (Json). */
+function learnerNameFromSetting(raw: unknown): string | null {
+  if (typeof raw === 'string' && raw.trim().length > 0) return raw.trim()
+  if (raw && typeof raw === 'object') {
+    const record = raw as Record<string, unknown>
+    const candidate =
+      typeof record.learnerName === 'string' ? record.learnerName : typeof record.name === 'string' ? record.name : null
+    if (candidate && candidate.trim().length > 0) return candidate.trim()
+  }
+  return null
+}
+
 export async function GET() {
   try {
     const progress = await db.progress.findMany({ orderBy: [{ path: 'asc' }, { moduleCode: 'asc' }] })
     const competencies = await db.competency.findMany({ orderBy: { code: 'asc' } })
-    return NextResponse.json({ progress, competencies })
+
+    // ---- Bloc « certificate » : calcul serveur pour l'attestation ----
+    const [passedAgg, passedExercises, attemptsCount, anomaliesResolved, profileSetting] = await Promise.all([
+      db.exerciseAttempt.aggregate({ where: { passed: true }, _avg: { score: true } }),
+      db.exerciseAttempt.groupBy({ by: ['exerciseKey'], where: { passed: true } }),
+      db.exerciseAttempt.count(),
+      db.anomaly.count({ where: { status: 'RESOLVED' } }),
+      db.setting.findUnique({ where: { key: 'profile' } }),
+    ])
+
+    // Modules complétés : croisés avec les référentiels statiques (source unique)
+    const completedA = new Set(
+      progress.filter((p) => p.path === 'A' && p.status === 'COMPLETED').map((p) => p.moduleCode),
+    )
+    const completedB = new Set(
+      progress.filter((p) => p.path === 'B' && p.status === 'COMPLETED').map((p) => p.moduleCode),
+    )
+    const modulesACompleted = MODULES_A.filter((m) => completedA.has(m.code)).length
+    const modulesBCompleted = MODULES_B.filter((m) => completedB.has(m.code)).length
+    const pathACompleted = modulesACompleted === MODULES_A.length
+    const pathBCompleted = modulesBCompleted === MODULES_B.length
+
+    // Date d'obtention : dernière progression mise à jour sur le parcours A
+    // une fois celui-ci complet (= moment où le dernier module a été terminé).
+    let issuedAt: string | null = null
+    if (pathACompleted) {
+      const latest = progress
+        .filter((p) => p.path === 'A')
+        .reduce<Date | null>((acc, p) => (acc === null || p.updatedAt > acc ? p.updatedAt : acc), null)
+      issuedAt = latest ? latest.toISOString() : null
+    }
+
+    const certificate: CertificateData = {
+      learnerName: learnerNameFromSetting(profileSetting?.value) ?? DEFAULT_LEARNER_NAME,
+      pathACompleted,
+      pathBCompleted,
+      modulesACompleted,
+      modulesATotal: MODULES_A.length,
+      modulesBCompleted,
+      modulesBTotal: MODULES_B.length,
+      exercisesPassed: passedExercises.length,
+      exercisesTotal: exercisesStats().total,
+      avgScore: passedAgg._avg.score ?? 0,
+      attemptsCount,
+      issuedAt,
+      anomaliesResolved,
+    }
+
+    return NextResponse.json({ progress, competencies, certificate })
   } catch (e) {
     console.error('progress GET error', e)
     return NextResponse.json({ error: 'Erreur de lecture de la progression.' }, { status: 500 })

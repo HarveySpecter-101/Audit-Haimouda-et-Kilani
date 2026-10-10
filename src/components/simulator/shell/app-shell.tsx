@@ -8,6 +8,8 @@ import { Topbar } from '@/components/simulator/shell/topbar'
 import { FooterBar } from '@/components/simulator/shell/footer-bar'
 import { ChiefWindow } from '@/components/simulator/chief/chief-window'
 import { KeyboardShortcuts } from '@/components/simulator/shell/keyboard-shortcuts'
+import { AchievementToast } from '@/components/simulator/shared/achievement-toast'
+import { ScrollTopButton } from '@/components/simulator/shell/scroll-top-button'
 import { ActiveView } from '@/components/simulator/views/registry'
 
 // ============================================================
@@ -83,7 +85,7 @@ export function AppShell() {
             </div>
           </main>
         ) : (
-          <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 lg:px-6">
+          <main tabIndex={-1} className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 outline-none lg:px-6">
             <ActiveView />
           </main>
         )}
@@ -91,6 +93,11 @@ export function AppShell() {
       </div>
       <ChiefWindow />
       <KeyboardShortcuts />
+      {/* Surveillant global des réussites débloquées (toasts autonomes,
+          rafraîchis via l'événement 'sim:achievements-refresh') */}
+      <AchievementToast />
+      {/* Retour en haut : utile sur les vues longues (atelier, audit) */}
+      <ScrollTopButton />
     </div>
   )
 }

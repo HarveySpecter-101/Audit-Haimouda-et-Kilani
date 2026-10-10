@@ -331,8 +331,8 @@ function EntryFormSection({ defaultMonth }: { defaultMonth: number }) {
             <div className="flex flex-wrap gap-2">
               {pendingDocs.data.documents.slice(0, 8).map((d) => (
                 <Button key={d.ref} variant="outline" size="sm" className="h-auto max-w-72 flex-col items-start gap-0.5 py-2 text-left" onClick={() => loadDoc(d)}>
-                  <span className="line-clamp-1 text-xs font-medium">{d.title}</span>
-                  <span className="text-xs text-muted-foreground">{d.amount ? fmtEUR(d.amount) : '—'}</span>
+                  <span className="w-full line-clamp-1 text-xs font-medium">{d.title}</span>
+                  <span className="w-full text-xs text-muted-foreground">{d.amount ? fmtEUR(d.amount) : '—'}</span>
                 </Button>
               ))}
             </div>
@@ -359,7 +359,7 @@ function JournalsSection() {
     queryKey: ['entries', journal, month, q, page],
     queryFn: async () => {
       const params = new URLSearchParams({ journal, limit: String(limit), offset: String(page * limit) })
-      if (month) params.set('month', month)
+      if (month && month !== 'all') params.set('month', month)
       if (q) params.set('q', q)
       const res = await fetch(`/api/entries?${params}`)
       if (!res.ok) throw new Error('Erreur')
@@ -405,7 +405,7 @@ function JournalsSection() {
           <Select value={month} onValueChange={(v) => { setMonth(v); setPage(0) }}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Tous</SelectItem>
+              <SelectItem value="all">Tous</SelectItem>
               {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
                 <SelectItem key={m} value={String(m)}>{monthLabel(m)}</SelectItem>
               ))}
@@ -432,7 +432,7 @@ function JournalsSection() {
         {entries.isLoading ? (
           <Skeleton className="m-3 h-40" />
         ) : entries.data && entries.data.entries.length ? (
-          <table className="w-full text-xs">
+          <div className="overflow-x-auto"><table className="w-full text-xs">
             <thead className="sticky top-0 bg-muted/80 backdrop-blur">
               <tr className="text-left uppercase tracking-wide text-muted-foreground">
                 <th className="p-2">Date</th>
@@ -463,7 +463,7 @@ function JournalsSection() {
                 </>
               ))}
             </tbody>
-          </table>
+          </table></div>
         ) : (
           <EmptyState title="Aucune écriture" description="Modifiez les filtres." />
         )}
@@ -511,7 +511,7 @@ function LedgerSection() {
             <StatCard title="Solde au 31/12" value={fmtEUR(gl.data.closing.debit || gl.data.closing.credit)} hint={gl.data.closing.debit ? 'débiteur' : 'créditeur'} />
           </div>
           <ScrollArea className="max-h-[480px] rounded-lg border">
-            <table className="w-full text-xs">
+            <div className="overflow-x-auto"><table className="w-full text-xs">
               <thead className="sticky top-0 bg-muted/80 backdrop-blur">
                 <tr className="text-left uppercase tracking-wide text-muted-foreground">
                   <th className="p-2">Date</th>
@@ -536,7 +536,7 @@ function LedgerSection() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </ScrollArea>
         </>
       ) : null}
@@ -590,7 +590,7 @@ function BalanceSection() {
         <Skeleton className="h-64" />
       ) : (
         <ScrollArea className="max-h-[520px] rounded-lg border">
-          <table className="w-full text-xs">
+          <div className="overflow-x-auto"><table className="w-full text-xs">
             <thead className="sticky top-0 bg-muted/80 backdrop-blur">
               <tr className="text-left uppercase tracking-wide text-muted-foreground">
                 <th className="p-2">Compte</th>
@@ -628,7 +628,7 @@ function BalanceSection() {
                 <td className="p-2 text-right tabular-nums">{fmtEUR(bal.data?.totals.closingCredit ?? 0)}</td>
               </tr>
             </tfoot>
-          </table>
+          </table></div>
         </ScrollArea>
       )}
       <p className="text-xs text-muted-foreground">
@@ -747,7 +747,7 @@ function AuxiliariesSection() {
           <CardHeader><CardTitle className="text-sm">Balances auxiliaires {kind === 'CLIENT' ? 'clients' : 'fournisseurs'}</CardTitle></CardHeader>
           <CardContent className="p-0">
             <ScrollArea className="max-h-[420px]">
-              <table className="w-full text-xs">
+              <div className="overflow-x-auto"><table className="w-full text-xs">
                 <thead className="sticky top-0 bg-muted/80">
                   <tr className="text-left uppercase text-muted-foreground">
                     <th className="p-2">Aux</th>
@@ -770,7 +770,7 @@ function AuxiliariesSection() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </ScrollArea>
           </CardContent>
         </Card>
@@ -783,7 +783,7 @@ function AuxiliariesSection() {
           <CardContent className="p-0">
             {current ? (
               <ScrollArea className="max-h-[420px]">
-                <table className="w-full text-xs">
+                <div className="overflow-x-auto"><table className="w-full text-xs">
                   <thead className="sticky top-0 bg-muted/80">
                     <tr className="text-left uppercase text-muted-foreground">
                       <th className="p-2">✓</th>
@@ -819,7 +819,7 @@ function AuxiliariesSection() {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </table></div>
               </ScrollArea>
             ) : (
               <p className="p-4 text-sm text-muted-foreground">
@@ -838,7 +838,7 @@ function AuxiliariesSection() {
           </CardHeader>
           <CardContent className="p-0">
             <ScrollArea className="max-h-44">
-              <table className="w-full text-xs">
+              <div className="overflow-x-auto"><table className="w-full text-xs">
                 <thead className="sticky top-0 bg-muted/80">
                   <tr className="text-left uppercase text-muted-foreground">
                     <th className="p-2">Lettre</th>
@@ -870,7 +870,7 @@ function AuxiliariesSection() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </ScrollArea>
           </CardContent>
         </Card>
@@ -880,7 +880,7 @@ function AuxiliariesSection() {
           <CardHeader><CardTitle className="text-sm">Balance âgée clients (au 31/12)</CardTitle></CardHeader>
           <CardContent className="p-0">
             <ScrollArea className="max-h-56">
-              <table className="w-full text-xs">
+              <div className="overflow-x-auto"><table className="w-full text-xs">
                 <thead className="sticky top-0 bg-muted/80">
                   <tr className="text-left uppercase text-muted-foreground">
                     <th className="p-2">Client</th>
@@ -903,7 +903,7 @@ function AuxiliariesSection() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </ScrollArea>
             <p className="p-2 text-xs text-muted-foreground">
               La tranche « &gt; 180 j » en rouge exige une action (relance, douteux, dépréciation) — cf. C005 (12 400 €).
@@ -1017,7 +1017,7 @@ function BankReconSection() {
           <CardHeader><CardTitle className="text-sm">Relevé bancaire NORDBANK — {monthLabel(Number(month))}</CardTitle></CardHeader>
           <CardContent className="p-0">
             <ScrollArea className="max-h-[420px]">
-              <table className="w-full text-xs">
+              <div className="overflow-x-auto"><table className="w-full text-xs">
                 <thead className="sticky top-0 bg-muted/80">
                   <tr className="text-left uppercase text-muted-foreground">
                     <th className="p-2">Date</th>
@@ -1042,7 +1042,7 @@ function BankReconSection() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </ScrollArea>
           </CardContent>
         </Card>
@@ -1050,7 +1050,7 @@ function BankReconSection() {
           <CardHeader><CardTitle className="text-sm">Écritures de banque (compte 512000)</CardTitle></CardHeader>
           <CardContent className="p-0">
             <ScrollArea className="max-h-[420px]">
-              <table className="w-full text-xs">
+              <div className="overflow-x-auto"><table className="w-full text-xs">
                 <thead className="sticky top-0 bg-muted/80">
                   <tr className="text-left uppercase text-muted-foreground">
                     <th className="p-2">Date</th>
@@ -1073,7 +1073,7 @@ function BankReconSection() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </ScrollArea>
           </CardContent>
         </Card>
@@ -1135,7 +1135,7 @@ function VatSection() {
         <StatCard title="TVA à décaisser (annuelle)" value={fmtEUR(vat.data?.totals.decaisse ?? 0)} tone="warning" />
       </div>
       <ScrollArea className="max-h-72 rounded-lg border">
-        <table className="w-full text-xs">
+        <div className="overflow-x-auto"><table className="w-full text-xs">
           <thead className="sticky top-0 bg-muted/80">
             <tr className="text-left uppercase text-muted-foreground">
               <th className="p-2">Mois</th>
@@ -1154,7 +1154,7 @@ function VatSection() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       </ScrollArea>
       <Card>
         <CardHeader><CardTitle className="text-sm">Points de contrôle — {monthLabel(Number(month))}</CardTitle></CardHeader>
@@ -1205,7 +1205,7 @@ function AssetsSection() {
         <StatCard title="Actifs (dont cédée)" value={`${ASSETS.length} actifs`} hint="IMMO-09 cédée en septembre" />
       </div>
       <ScrollArea className="max-h-[420px] rounded-lg border">
-        <table className="w-full text-xs">
+        <div className="overflow-x-auto"><table className="w-full text-xs">
           <thead className="sticky top-0 bg-muted/80">
             <tr className="text-left uppercase text-muted-foreground">
               <th className="p-2">Code</th>
@@ -1232,7 +1232,7 @@ function AssetsSection() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       </ScrollArea>
       <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
         <p className="font-semibold">Anomalies à détecter (registre) :</p>
@@ -1309,7 +1309,7 @@ function StocksSection() {
         <StatCard title="Marchandises en transit" value={fmtEUR(8400)} tone="warning" hint="ANO-055 : cut-off" />
       </div>
       <ScrollArea className="max-h-[420px] rounded-lg border">
-        <table className="w-full text-xs">
+        <div className="overflow-x-auto"><table className="w-full text-xs">
           <thead className="sticky top-0 bg-muted/80">
             <tr className="text-left uppercase text-muted-foreground">
               <th className="p-2">Réf</th>
@@ -1334,7 +1334,7 @@ function StocksSection() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       </ScrollArea>
       <Card>
         <CardHeader><CardTitle className="text-sm">Écriture de dépréciation (inventaire)</CardTitle></CardHeader>
@@ -1368,7 +1368,7 @@ function PayrollSection() {
         <CardHeader><CardTitle className="text-sm">Journaux de paie mensuels</CardTitle></CardHeader>
         <CardContent className="p-0">
           <ScrollArea className="max-h-[420px]">
-            <table className="w-full text-xs">
+            <div className="overflow-x-auto"><table className="w-full text-xs">
               <thead className="sticky top-0 bg-muted/80">
                 <tr className="text-left uppercase text-muted-foreground">
                   <th className="p-2">Mois</th>
@@ -1383,7 +1383,7 @@ function PayrollSection() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </ScrollArea>
         </CardContent>
       </Card>
@@ -1440,7 +1440,7 @@ function ReviewSection() {
     queryKey: ['anomalies', status, category],
     queryFn: async () => {
       const params = new URLSearchParams()
-      if (status) params.set('status', status)
+      if (status && status !== 'all') params.set('status', status)
       if (category) params.set('category', category)
       const res = await fetch(`/api/anomalies?${params}`)
       if (!res.ok) throw new Error('Erreur')
@@ -1498,7 +1498,7 @@ function ReviewSection() {
             <SelectItem value="OPEN">Ouvertes</SelectItem>
             <SelectItem value="RESOLVED">Résolues</SelectItem>
             <SelectItem value="WAIVED">Écartées</SelectItem>
-            <SelectItem value="">Toutes</SelectItem>
+            <SelectItem value="all">Toutes</SelectItem>
           </SelectContent>
         </Select>
         <Select value={category} onValueChange={setCategory}>
@@ -1516,7 +1516,7 @@ function ReviewSection() {
       </div>
       <div className="grid gap-4 lg:grid-cols-5">
         <ScrollArea className="max-h-[480px] rounded-lg border lg:col-span-3">
-          <table className="w-full text-xs">
+          <div className="overflow-x-auto"><table className="w-full text-xs">
             <thead className="sticky top-0 bg-muted/80">
               <tr className="text-left uppercase text-muted-foreground">
                 <th className="p-2">Code</th>
@@ -1535,7 +1535,7 @@ function ReviewSection() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </ScrollArea>
         <Card className="lg:col-span-2">
           <CardHeader><CardTitle className="text-sm">{selected ? `${selected.code} — ${selected.title}` : 'Fiche anomalie'}</CardTitle></CardHeader>
@@ -1653,7 +1653,7 @@ function ClosingSection() {
         </p>
       </div>
       <ScrollArea className="max-h-[520px] rounded-lg border">
-        <table className="w-full text-xs">
+        <div className="overflow-x-auto"><table className="w-full text-xs">
           <thead className="sticky top-0 bg-muted/80">
             <tr className="text-left uppercase text-muted-foreground">
               <th className="p-2">Réf.</th>
@@ -1686,7 +1686,7 @@ function ClosingSection() {
               )
             })}
           </tbody>
-        </table>
+        </table></div>
       </ScrollArea>
     </div>
   )
@@ -1718,7 +1718,7 @@ function StatementsSection() {
         <Card>
           <CardHeader><CardTitle className="text-sm">Bilan (PCG simplifié)</CardTitle></CardHeader>
           <CardContent className="space-y-3 text-xs">
-            <table className="w-full">
+            <div className="overflow-x-auto"><table className="w-full">
               <thead>
                 <tr className="text-left uppercase text-muted-foreground">
                   <th className="pb-1">Actif</th>
@@ -1742,9 +1742,9 @@ function StatementsSection() {
                   <td className="py-1 text-right tabular-nums">{fmtEUR(d.bilan.actif.totalActifNet)}</td>
                 </tr>
               </tbody>
-            </table>
+            </table></div>
             <Separator />
-            <table className="w-full">
+            <div className="overflow-x-auto"><table className="w-full">
               <thead>
                 <tr className="text-left uppercase text-muted-foreground">
                   <th className="pb-1">Passif</th>
@@ -1763,14 +1763,14 @@ function StatementsSection() {
                   <td className="py-1 text-right tabular-nums">{fmtEUR(d.bilan.passif.totalPassif)}</td>
                 </tr>
               </tbody>
-            </table>
+            </table></div>
           </CardContent>
         </Card>
         <div className="space-y-4">
           <Card className="print-avoid-break">
             <CardHeader><CardTitle className="text-sm">Compte de résultat (par nature)</CardTitle></CardHeader>
             <CardContent className="text-xs">
-              <table className="w-full">
+              <div className="overflow-x-auto"><table className="w-full">
                 <tbody>
                   {d.compteResultat.produits.map((p) => (
                     <tr key={p.label} className="border-t">
@@ -1797,7 +1797,7 @@ function StatementsSection() {
                     <td className="py-1.5 text-right tabular-nums">{fmtEUR(d.compteResultat.resultat, { sign: true })}</td>
                   </tr>
                 </tbody>
-              </table>
+              </table></div>
             </CardContent>
           </Card>
           <Card className="print-avoid-break">

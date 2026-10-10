@@ -70,11 +70,15 @@ function taskKeyForModule(moduleCode: string): string | undefined {
 export default function LearningView() {
   const { sub, pathBUnlocked, setPathBUnlocked, activeModule, setActiveModule, navigate, openChief } =
     useSimulator()
+  // Exercice ouvert : état du store (et non local) — le deep-link
+  // navigate({ exercise }) depuis la heatmap l'initialise directement,
+  // comme activeModule pour les modules (zéro synchronisation d'état).
+  const selectedExercise = useSimulator((s) => s.selectedExercise)
+  const setSelectedExercise = useSimulator((s) => s.setSelectedExercise)
   const queryClient = useQueryClient()
   const { toast } = useToast()
 
   const [tab, setTab] = useState<'A' | 'B'>(sub === 'b' ? 'B' : 'A')
-  const [selectedExercise, setSelectedExercise] = useState<string | null>(null)
   // Module sélectionné : source unique = activeModule (deep-link géré par
   // navigate({module}) dans le store — pas d'état local synchronisé)
   const selectedModule = activeModule
@@ -445,6 +449,14 @@ function ModuleDetail({
 
   const current = exercises.data?.exercises.find((e) => e.key === selectedExercise) ?? null
 
+  // Défilement doux vers l'exercice ciblé dès qu'il est chargé — le
+  // deep-link (heatmap) arrive en milieu de page, le runner doit être visible.
+  const runnerRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!current || !selectedExercise) return
+    runnerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [current, selectedExercise])
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-3">
@@ -610,7 +622,7 @@ function ModuleDetail({
           )}
 
           {current ? (
-            <div className="space-y-2 pt-2">
+            <div ref={runnerRef} className="space-y-2 pt-2 scroll-mt-24">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Exercice sélectionné

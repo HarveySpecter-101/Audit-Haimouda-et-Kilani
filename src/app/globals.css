@@ -148,6 +148,17 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Heatmap d'assiduité : cellule interactive (g role="button") —
+   liseré de focus clavier sur la cellule elle-même (rect) car
+   l'outline ne s'applique pas de façon fiable aux <g> SVG. */
+.activity-heatmap g[role='button']:focus {
+  outline: none;
+}
+.activity-heatmap g[role='button']:focus-visible > rect:first-of-type {
+  stroke: var(--primary);
+  stroke-width: 1.4;
+}
+
 /* Impression : masquer la navigation */
 @media print {
   .no-print {

@@ -227,7 +227,8 @@ export function DataManagementCard() {
             <p className="text-sm font-medium">Exporter mes travaux</p>
             <p className="text-xs leading-relaxed text-muted-foreground">
               Génère un fichier JSON complet : progression des modules, compétences, tentatives d’exercices,
-              tâches terminées, contenus des livrables, résolutions d’anomalies et paramètres.
+              tâches terminées, contenus des livrables, résolutions d’anomalies, paramètres et profil du
+              stagiaire (nom + poste visé de l’attestation).
             </p>
             <Button variant="outline" size="sm" className="gap-1.5" onClick={doExport}>
               <Download className="size-3.5" /> Exporter (JSON)

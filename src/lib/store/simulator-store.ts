@@ -56,6 +56,8 @@ interface SimulatorState {
   mode: 'guided' | 'mission' | 'exam'
   pathBUnlocked: boolean
   activeModule: string | null
+  /** Exercice ouvert dans le détail de module (deep-link heatmap / sélection manuelle). */
+  selectedExercise: string | null
   // Fenêtre chef de mission
   chief: ChiefWindowState
   // Bootstrap
@@ -66,6 +68,7 @@ interface SimulatorState {
   setMode: (mode: 'guided' | 'mission' | 'exam') => void
   setPathBUnlocked: (v: boolean) => void
   setActiveModule: (code: string | null) => void
+  setSelectedExercise: (key: string | null) => void
   openChief: (ctx?: { taskKey?: string; moduleCode?: string; exerciseKey?: string; title?: string }) => void
   closeChief: () => void
   toggleChiefMinimize: () => void
@@ -85,6 +88,7 @@ export const useSimulator = create<SimulatorState>()(
       mode: 'guided',
       pathBUnlocked: false,
       activeModule: null,
+      selectedExercise: null,
       chief: {
         open: false,
         minimized: false,
@@ -103,11 +107,15 @@ export const useSimulator = create<SimulatorState>()(
           params,
           // Deep-link module (ex. ?module=A5 depuis la recherche / le chef de mission)
           ...(params.module ? { activeModule: params.module } : {}),
+          // Deep-link exercice (ex. { exercise: 'A1-Q01' } depuis la heatmap) :
+          // ouvre le module et sélectionne l'exercice dans le Parcours.
+          ...(params.exercise ? { selectedExercise: params.exercise } : {}),
         })),
       setMonth: (m) => set({ currentMonth: Math.max(1, Math.min(13, m)) }),
       setMode: (mode) => set({ mode }),
       setPathBUnlocked: (v) => set({ pathBUnlocked: v }),
       setActiveModule: (code) => set({ activeModule: code }),
+      setSelectedExercise: (key) => set({ selectedExercise: key }),
       openChief: (ctx) =>
         set((s) => ({
           chief: {

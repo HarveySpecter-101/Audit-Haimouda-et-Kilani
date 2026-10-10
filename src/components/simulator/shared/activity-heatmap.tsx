@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { CalendarCheck, CheckCircle2, ChevronRight, Flame, X } from 'lucide-react'
+import { ArrowUpRight, CalendarCheck, CheckCircle2, ChevronRight, Flame, X } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useSimulator } from '@/lib/store/simulator-store'
 
 // ============================================================
 // ASSIDUITÉ — HEATMAP DES TENTATIVES (84 jours, style GitHub)
@@ -16,7 +17,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 // 1-4 = dégradé teal via color-mix sur var(--primary) — les
 // couleurs dérivent des variables CSS, donc clair comme sombre.
 // Drill-down : un clic (ou Entrée) sur une journée active ouvre
-// le détail des tentatives du jour (requête /api/attempts?date=).
+// le détail des tentatives du jour (requête /api/attempts?date=),
+// et chaque tentative est un lien direct vers l'exercice
+// (navigation → Parcours, module ouvert, exercice sélectionné).
 // ============================================================
 
 export interface ActivityDay {
@@ -83,6 +86,16 @@ function levelOf(count: number): number {
   return 4
 }
 
+/** Libellés pédagogiques des niveaux de la légende (le seuil se
+ *  lit dans le title du pastille et le texte sr-only). */
+const LEVEL_HINTS = [
+  'Aucune tentative ce jour-là',
+  'Léger : 1 à 2 tentatives — un entretien de rappel quotidien',
+  'Soutenu : 3 à 4 tentatives — une séance de travail régulière',
+  'Intensif : 5 à 8 tentatives — une demi-journée de pratique',
+  'Immersion : 9 tentatives ou plus — une journée complète dédiée',
+]
+
 /** '2026-10-03' → '03/10/2026' (date française, sans pivot UTC) */
 function fmtFR(iso: string): string {
   const [y, m, d] = iso.split('-')
@@ -121,6 +134,7 @@ export function ActivityHeatmap({
   bestDay,
 }: ActivityHeatmapProps) {
   const [selected, setSelected] = useState<string | null>(null)
+  const navigate = useSimulator((s) => s.navigate)
 
   // Détail des tentatives de la journée sélectionnée (drill-down)
   const dayQuery = useQuery<{ attempts: DayAttempt[] }>({
@@ -181,7 +195,7 @@ export function ActivityHeatmap({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="activity-heatmap space-y-3">
       {/* Chips de statistiques */}
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1">
@@ -303,12 +317,18 @@ export function ActivityHeatmap({
         </svg>
       </div>
 
-      {/* Légende */}
+      {/* Légende — chaque pastille porte son seuil pédagogique au survol */}
       <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
         <span className="flex items-center gap-1.5">
           Moins
           {LEVEL_FILLS.map((fill, i) => (
-            <span key={i} className="size-2.5 rounded-[2px]" style={{ backgroundColor: fill }} aria-hidden />
+            <span
+              key={i}
+              className="size-2.5 rounded-[2px] ring-1 ring-inset ring-foreground/10 transition-transform hover:scale-125"
+              style={{ backgroundColor: fill }}
+              title={LEVEL_HINTS[i]}
+              aria-hidden
+            />
           ))}
           Plus
         </span>
@@ -317,6 +337,14 @@ export function ActivityHeatmap({
         <span className="flex items-center gap-1">
           <ChevronRight className="size-3" aria-hidden /> clic sur une journée active : détail
         </span>
+        {/* Lecture textuelle des seuils pour les lecteurs d'écran */}
+        <ul className="sr-only">
+          {LEVEL_HINTS.map((h, i) => (
+            <li key={i}>
+              Niveau {i} — {h}
+            </li>
+          ))}
+        </ul>
       </div>
 
       {/* Détail des tentatives de la journée sélectionnée */}
@@ -342,6 +370,9 @@ export function ActivityHeatmap({
               <X className="size-4" />
             </button>
           </div>
+          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+            Cliquez sur une tentative pour reprendre l’exercice dans le parcours d’apprentissage.
+          </p>
           {dayQuery.isPending ? (
             <div className="mt-2 space-y-1.5">
               <Skeleton className="h-8 w-full" />
@@ -356,24 +387,35 @@ export function ActivityHeatmap({
           ) : (
             <ul className="mt-2 max-h-56 space-y-1 overflow-y-auto pr-1 print-expand scroll-slim">
               {dayQuery.data.attempts.map((a) => (
-                <li
-                  key={a.id}
-                  className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border bg-background px-2.5 py-1.5 text-xs"
-                >
-                  <span className="font-mono text-muted-foreground">{a.exerciseKey}</span>
-                  <span className="text-muted-foreground">{a.moduleCode}</span>
-                  {a.passed ? (
-                    <span className="flex items-center gap-1 font-medium text-emerald-700 dark:text-emerald-400">
-                      <CheckCircle2 className="size-3.5" aria-hidden /> réussi
+                <li key={a.id}>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate('learning', null, { module: a.moduleCode, exercise: a.exerciseKey })
+                    }
+                    aria-label={`Ouvrir l’exercice ${a.exerciseKey} (${a.moduleCode}) dans le parcours`}
+                    title={`Reprendre l’exercice ${a.exerciseKey} — module ${a.moduleCode}`}
+                    className="group flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-md border bg-background px-2.5 py-1.5 text-left text-xs transition-colors hover:border-primary/40 hover:bg-primary/5"
+                  >
+                    <span className="font-mono text-muted-foreground group-hover:text-primary">{a.exerciseKey}</span>
+                    <span className="text-muted-foreground">{a.moduleCode}</span>
+                    {a.passed ? (
+                      <span className="flex items-center gap-1 font-medium text-emerald-700 dark:text-emerald-400">
+                        <CheckCircle2 className="size-3.5" aria-hidden /> réussi
+                      </span>
+                    ) : (
+                      <span className="font-medium text-amber-700 dark:text-amber-400">à retravailler</span>
+                    )}
+                    <span className="ml-auto flex items-center gap-2 text-muted-foreground">
+                      <span className="uppercase tracking-wide">{a.mode === 'exam' ? 'examen' : a.mode === 'mission' ? 'mission' : 'guidé'}</span>
+                      <span className="tabular-nums font-medium text-foreground">{Math.round(a.score * 100)} %</span>
+                      <span className="tabular-nums">{fmtTime(a.attemptedAt)}</span>
+                      <ArrowUpRight
+                        className="size-3.5 text-primary opacity-0 transition-opacity group-hover:opacity-100"
+                        aria-hidden
+                      />
                     </span>
-                  ) : (
-                    <span className="font-medium text-amber-700 dark:text-amber-400">à retravailler</span>
-                  )}
-                  <span className="ml-auto flex items-center gap-2 text-muted-foreground">
-                    <span className="uppercase tracking-wide">{a.mode === 'exam' ? 'examen' : a.mode === 'mission' ? 'mission' : 'guidé'}</span>
-                    <span className="tabular-nums font-medium text-foreground">{Math.round(a.score * 100)} %</span>
-                    <span className="tabular-nums">{fmtTime(a.attemptedAt)}</span>
-                  </span>
+                  </button>
                 </li>
               ))}
             </ul>

@@ -12,8 +12,8 @@ import type { CertificateData } from '@/components/simulator/assessment/certific
 //         de fin de parcours (vue Évaluation).
 // PATCH → { moduleCode, lessonsRead?, status?, score? } (upsert)
 //       | { action: 'unlock-path-b' } → appState.pathBUnlocked = true
-//       | { action: 'update-profile', learnerName } → Setting « profile »
-//         (nom du stagiaire affiché sur l'attestation)
+//       | { action: 'update-profile', learnerName, jobTitle? } → Setting « profile »
+//         (identité du stagiaire : nom + poste visé sur l'attestation)
 // Renvoie { progress, unlocked? } après chaque écriture.
 // ============================================================
 
@@ -38,6 +38,20 @@ function learnerNameFromSetting(raw: unknown): string | null {
     if (candidate && candidate.trim().length > 0) return candidate.trim()
   }
   return null
+}
+
+/** Extrait le « poste visé » optionnel d'un Setting « profile » (null si absent). */
+function learnerJobTitleFromSetting(raw: unknown): string | null {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    const v = (raw as Record<string, unknown>).jobTitle
+    if (typeof v === 'string' && v.trim().length > 0) return v.trim().replace(/\s+/g, ' ')
+  }
+  return null
+}
+
+/** Nettoie un libellé de poste (null → ''). */
+function cleanJobTitle(v: unknown): string {
+  return typeof v === 'string' ? v.trim().replace(/\s+/g, ' ').slice(0, 80) : ''
 }
 
 export async function GET() {
@@ -78,6 +92,7 @@ export async function GET() {
 
     const certificate: CertificateData = {
       learnerName: learnerNameFromSetting(profileSetting?.value) ?? DEFAULT_LEARNER_NAME,
+      learnerJobTitle: learnerJobTitleFromSetting(profileSetting?.value),
       pathACompleted,
       pathBCompleted,
       modulesACompleted,
@@ -96,7 +111,10 @@ export async function GET() {
       progress,
       competencies,
       certificate,
-      profile: { learnerName: certificate.learnerName },
+      profile: {
+        learnerName: certificate.learnerName,
+        jobTitle: certificate.learnerJobTitle,
+      },
     })
   } catch (e) {
     console.error('progress GET error', e)
@@ -113,9 +131,10 @@ export async function PATCH(request: Request) {
       status?: (typeof VALID_STATUS)[number]
       score?: number
       learnerName?: string
+      jobTitle?: string
     }
 
-    // --- Profil du stagiaire (nom de l'attestation) ---
+    // --- Profil du stagiaire (nom + poste visé de l'attestation) ---
     if (body.action === 'update-profile') {
       const name = (body.learnerName ?? '').trim().replace(/\s+/g, ' ')
       if (name.length < 2 || name.length > 60) {
@@ -124,7 +143,11 @@ export async function PATCH(request: Request) {
           { status: 400 },
         )
       }
-      const value = { learnerName: name, updatedAt: new Date().toISOString() }
+      const jobTitle = cleanJobTitle(body.jobTitle)
+      if (jobTitle.length > 80) {
+        return NextResponse.json({ error: 'Poste visé trop long : 80 caractères maximum.' }, { status: 400 })
+      }
+      const value = { learnerName: name, jobTitle, updatedAt: new Date().toISOString() }
       await db.setting.upsert({
         where: { key: 'profile' },
         update: { value },
@@ -135,10 +158,10 @@ export async function PATCH(request: Request) {
           entity: 'Setting',
           entityId: 'profile',
           action: 'UPDATE',
-          detail: { learnerName: name },
+          detail: { learnerName: name, ...(jobTitle ? { jobTitle } : { jobTitle: null }) },
         },
       })
-      return NextResponse.json({ profile: { learnerName: name } })
+      return NextResponse.json({ profile: { learnerName: name, jobTitle: jobTitle || null } })
     }
 
     // --- Déblocage du parcours B (fin du parcours A) ---

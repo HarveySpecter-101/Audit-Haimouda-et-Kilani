@@ -7,6 +7,8 @@ import { getAppState, upsertAppState } from '@/lib/server/queries'
 // /api/settings/export) — remplacement transactionnel des
 // tables de progression après validation structurelle.
 // POST {version, data} → {imported: true, details}
+// Le bloc optionnel « profile » (nom + poste visé) restaure
+// l'identité du stagiaire (Setting « profile »).
 // ============================================================
 
 interface ImportProgressRow {
@@ -255,6 +257,23 @@ export async function POST(request: Request) {
           create: { key: 'appState', value: incoming },
         })
         details.appState = true
+      }
+
+      // ---------- Profil du stagiaire (optionnel) ----------
+      // Ne remplace jamais un profil existant par des données vides :
+      // un bloc « profile » absent ou sans nom laisse l'identité locale.
+      if (d.profile && typeof d.profile === 'object' && !Array.isArray(d.profile)) {
+        const p = d.profile as Record<string, unknown>
+        const name = typeof p.learnerName === 'string' ? p.learnerName.trim().replace(/\s+/g, ' ') : ''
+        const jobTitle = typeof p.jobTitle === 'string' ? p.jobTitle.trim().replace(/\s+/g, ' ').slice(0, 80) : ''
+        if (name.length >= 2 && name.length <= 60 && jobTitle.length <= 80) {
+          await tx.setting.upsert({
+            where: { key: 'profile' },
+            update: { value: { learnerName: name, jobTitle, updatedAt: new Date().toISOString() } },
+            create: { key: 'profile', value: { learnerName: name, jobTitle, updatedAt: new Date().toISOString() } },
+          })
+          details.profile = true
+        }
       }
     })
 

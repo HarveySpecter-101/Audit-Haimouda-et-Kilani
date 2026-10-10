@@ -21,6 +21,8 @@ import { Award, Info, Lock, Printer } from 'lucide-react'
 
 export interface CertificateData {
   learnerName: string
+  /** Poste visé (optionnel) — libellé sous le nom du stagiaire. */
+  learnerJobTitle?: string | null
   pathACompleted: boolean
   pathBCompleted: boolean
   modulesACompleted: number
@@ -147,6 +149,11 @@ export function CertificateCard({ certificate }: { certificate?: CertificateData
                 {/* Corps du certificat — le libellé s'adapte à l'état d'avancement */}
                 <p className="mx-auto max-w-xl text-sm leading-relaxed sm:text-[15px]">
                   Certifie que <span className="font-semibold">{cert.learnerName}</span>{' '}
+                  {cert.learnerJobTitle ? (
+                    <span className="text-muted-foreground">
+                      — <span className="italic">{cert.learnerJobTitle}</span> —{' '}
+                    </span>
+                  ) : null}
                   {completed ? 'a suivi et complété' : 'a suivi'} le parcours{' '}
                   <span className="font-semibold">{parcoursLabel}</span>
                   {!completed

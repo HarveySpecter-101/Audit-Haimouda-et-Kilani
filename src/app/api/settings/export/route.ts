@@ -6,14 +6,15 @@ import { getAppState } from '@/lib/server/queries'
 // Export complet de la progression de l'apprenant
 // GET /api/settings/export → { exportedAt, version, data }
 // Contenu : progression, compétences, tentatives, tâches,
-// livrables (contenu + revue), résolutions d'anomalies, appState.
+// livrables (contenu + revue), résolutions d'anomalies, appState,
+// profil du stagiaire (nom + poste visé de l'attestation).
 // ============================================================
 
 export const EXPORT_VERSION = 1
 
 export async function GET() {
   try {
-    const [progress, competencies, attempts, taskCompletions, deliverables, anomalies, appState] =
+    const [progress, competencies, attempts, taskCompletions, deliverables, anomalies, appState, profileSetting] =
       await Promise.all([
         db.progress.findMany({ orderBy: [{ path: 'asc' }, { moduleCode: 'asc' }] }),
         db.competency.findMany({ orderBy: { code: 'asc' } }),
@@ -40,7 +41,18 @@ export async function GET() {
           },
         }),
         getAppState(),
+        db.setting.findUnique({ where: { key: 'profile' } }),
       ])
+
+    // Profil du stagiaire : extrait des champs exploitables (jamais le Json brut)
+    const profileRaw =
+      profileSetting?.value && typeof profileSetting.value === 'object' && !Array.isArray(profileSetting.value)
+        ? (profileSetting.value as Record<string, unknown>)
+        : {}
+    const profile = {
+      learnerName: typeof profileRaw.learnerName === 'string' ? profileRaw.learnerName : null,
+      jobTitle: typeof profileRaw.jobTitle === 'string' && profileRaw.jobTitle.trim() ? profileRaw.jobTitle : null,
+    }
 
     return NextResponse.json({
       exportedAt: new Date().toISOString(),
@@ -94,6 +106,7 @@ export async function GET() {
           resolvedAt: a.resolvedAt,
         })),
         appState,
+        profile,
       },
     })
   } catch (e) {

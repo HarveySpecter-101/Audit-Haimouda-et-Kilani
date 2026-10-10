@@ -141,7 +141,10 @@ export function Sidebar({
                                   {openAnomalies}
                                 </Badge>
                               ) : item.shortcut && !isActive ? (
-                                <kbd className="hidden shrink-0 rounded border border-sidebar-foreground/20 bg-sidebar-accent/50 px-1 py-0 font-mono text-[10px] font-semibold text-sidebar-foreground/50 opacity-0 transition-opacity group-hover:opacity-100 lg:inline-flex" aria-hidden="true">
+                                <kbd
+                                  className="hidden shrink-0 rounded border border-sidebar-foreground/20 bg-sidebar-accent/50 px-1 py-0 font-mono text-[10px] font-semibold text-sidebar-foreground/50 lg:group-hover:inline-flex"
+                                  aria-hidden="true"
+                                >
                                   g {item.shortcut}
                                 </kbd>
                               ) : null}
@@ -186,7 +189,7 @@ export function Sidebar({
   return (
     <>
       {/* Desktop */}
-      <aside className="no-print sticky top-0 hidden h-svh w-64 shrink-0 border-r border-sidebar-border bg-sidebar lg:block">
+      <aside className="no-print sticky top-0 hidden h-svh w-[268px] shrink-0 border-r border-sidebar-border bg-sidebar lg:block">
         {content}
       </aside>
       {/* Mobile drawer */}

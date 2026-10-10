@@ -80,6 +80,20 @@ export default function DashboardView() {
   const setMonth = useSimulator((s) => s.setMonth)
   const openChief = useSimulator((s) => s.openChief)
 
+  // Profil du stagiaire (clé partagée ['assessment-bootstrap'] — aucune
+  // requête réseau supplémentaire si l'Évaluation ou les paramètres
+  // ont déjà chargé l'identité) : salutation personnalisée.
+  const profile = useQuery<{ profile?: { learnerName?: string } }>({
+    queryKey: ['assessment-bootstrap'],
+    queryFn: async () => {
+      const res = await fetch('/api/progress')
+      if (!res.ok) throw new Error('Erreur profil')
+      return res.json()
+    },
+    refetchOnWindowFocus: false,
+    staleTime: 60_000,
+  })
+
   const dash = useQuery<DashboardData>({
     queryKey: ['dashboard', currentMonth],
     queryFn: async () => {
@@ -136,11 +150,21 @@ export default function DashboardView() {
   const pathAProgression = d ? (d.progression.modulesACompleted / Math.max(1, d.progression.modulesATotal)) * 100 : 0
   const pathBProgression = d ? (d.progression.modulesBCompleted / Math.max(1, d.progression.modulesBTotal)) * 100 : 0
 
+  // Salutation personnalisée : prénom du profil + moment de la journée.
+  // Sans profil nominatif, on garde le titre générique de cabinet.
+  const learnerName = profile.data?.profile?.learnerName
+  const firstName = learnerName && learnerName !== 'Collaborateur stagiaire' ? learnerName.split(/\s+/)[0] : null
+  const hour = new Date().getHours()
+  const greeting = hour < 5 ? 'Bonne nuit' : hour < 18 ? 'Bonjour' : 'Bonsoir'
+  const dashTitle = firstName ? `${greeting}, ${firstName}` : 'Tableau de bord du collaborateur'
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <SectionTitle sub={`${monthLabel(currentMonth)} 2024 · Dossier NOVATECH DISTRIBUTION SAS (fictif) · ${b?.counts.entries ?? '—'} écritures au dossier`}>
-          Tableau de bord du collaborateur
+        <SectionTitle
+          sub={`${monthLabel(currentMonth)} 2024 · Dossier NOVATECH DISTRIBUTION SAS (fictif) · ${b?.counts.entries ?? '—'} écritures au dossier`}
+        >
+          {dashTitle}
         </SectionTitle>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" className="gap-1.5" onClick={() => navigate('learning')}>

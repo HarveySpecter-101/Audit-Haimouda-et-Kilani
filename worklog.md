@@ -327,3 +327,57 @@ QA de non-régression, puis les pistes recommandées par CR-4 : profil apprenant
 1. Le profil n'est PAS inclus dans l'export/import JSON des travaux (settings/export) — l'exporter serait cohérent (clé « profile » du Setting) si besoin de continuité entre environnements.
 2. Pistes suivantes : (a) export PDF dédié de l'attestation (impression navigateur aujourd'hui) ; (b) tooltip pédagogique sur les seuils de niveaux de la heatmap ; (c) champ « poste visé » optionnel du profil (libellé sur l'attestation) ; (d) liens cliquables depuis le panneau du jour vers l'exercice concerné.
 3. Serveur dev : toujours le process double-fork de CR-4 (voir consignes de relance dans CR-4).
+
+## Revue continue 6 — CR-6 (session du 10/10, soir) — EN COURS
+
+### État en début de session
+- CR-5 terminée proprement : profil éditable (nom), heatmap drill-down, puce topbar — 22/22 QA.
+- QA initiale CR-6 : lint 0/0, serveur 200, 11 vues × 2 viewports (1280/375) balayées — 0 erreur console, 0 débordement.
+  NOTE : `agent-browser press g+p` envoie une combinaison SIMULTANÉE — pour les raccourcis séquentiels g+lettre, faire `press g` puis `press l` séparément.
+
+### Travaux réalisés (tous vérifiés navigateur sauf mention contraire)
+
+**F-7a — Poste visé + profil dans export/import :**
+- /api/progress : PATCH update-profile accepte jobTitle (optionnel, nettoyé, ≤ 80 car.) ; GET renvoie profile { learnerName, jobTitle } + certificate.learnerJobTitle.
+- certificate-card : « Certifie que Camille Riou — Assistante comptable — a suivi… » (italique, discret si absent).
+- learner-profile-card : 2e champ « Poste visé (optionnel) » (icône BriefcaseBusiness, placeholder, aria-invalid, messages d'erreur distincts nom/poste, bouton Enregistrer unique, dirty = nom OU poste modifié).
+- Export : bloc data.profile { learnerName, jobTitle } (extrait propre du Setting, pas de Json brut).
+- Import : restauration validée du bloc profile (2-60 car. nom sinon ignoré) — testé aller-retour : « Test Import / Auditeur junior » puis retour à l'identique.
+- Topbar LearnerChip : « Nom · Poste visé » dans le libellé/title (max-w étendu).
+- Description export de la carte data-management mise à jour.
+
+**F-7c — Deep-link exercice depuis la heatmap :**
+- Store : selectedExercise devient un état du store (comme activeModule) + action setSelectedExercise ; navigate(params.exercise) le pose directement. RÉGRESSION ÉVITÉE : la 1re implémentation (focusExercise consommé dans un useEffect avec setState) violait react-hooks/set-state-in-effect — corrigé par l'état partagé, zéro synchronisation.
+- learning-view : selectedExercise lu du store (plus d'état local), ModuleDetail défile en douceur vers l'ExerciceRunner dès chargement (scroll-mt-24, ref).
+- activity-heatmap : chaque tentative du panneau du jour est un bouton (hover teal, ArrowUpRight en fondu, aria-label « Ouvrir l'exercice X (module) dans le parcours ») → navigate learning + module + exercise.
+- Testé bout-en-bout : dashboard → clic jour → clic tentative A3-Q01 → Parcours A3 ouvert, runner « Exercice sélectionné » rendu, scroll automatique OK. (PIÈGE DE TEST : innerText renvoie le texte transformé par text-transform:uppercase — « Exercice sélectionné » s'y lit EN MAJUSCULES, vérifier en minuscules.)
+
+**F-7b — Tooltips pédagogiques heatmap :**
+- Légende : chaque pastille porte son seuil (title + hover:scale-125, ring-foreground/10), liste sr-only « Niveau i — libellé » pour lecteurs d'écran. Libellés : Aucune / Léger 1-2 / Soutenu 3-4 / Intensif 5-8 / Immersion 9+.
+
+**F-7d — Polish :**
+- Focus clavier visible sur les cellules heatmap (règle CSS .activity-heatmap g[role=button]:focus-visible > rect { stroke: var(--primary) }) — vérifié au navigateur (stroke 1.4px).
+- Salutation personnalisée du dashboard : « Bonjour/Bonsoir/Bonne nuit, {prénom} » (clé assessment-bootstrap partagée — aucune requête en plus si déjà chargée) ; titre générique conservé sans profil nominatif. Vérifié (« Bonne nuit, Camille », heure serveur 4 h).
+
+### En cours / restant
+- QA finale complète (lint + balayage 2 viewports avec press séquentiels + VLM screenshots) puis section de clôture.
+
+### Clôture CR-6 — QA finale et état livré
+
+**QA finale :**
+- Lint : 0 erreur, 0 warning.
+- Balayage complet 11 vues × 2 viewports (1280/375) avec raccourcis SÉQUENTIELS (`press g` puis `press l`…) : **22/22 OK — 0 erreur page, 0 erreur/warning console, 0 débordement horizontal.**
+- Vérifications visuelles VLM : carte profil (avatar calé sur la 1re ligne de saisie après correction), attestation (nom + poste italique, aucun glitch), heatmap (grille teal, libellés de mois Juil.→Oct., initiales de jours, anneau de sélection, chips série/aujourd'hui/jours actifs).
+- Profil remis à l'état neutre (« Collaborateur stagiaire », poste effacé) ; tentatives et progression identiques à l'état de début de session (import de test annulé par restauration de l'export d'origine) ; fichiers temporaires de QA supprimés.
+
+**Corrections de polish supplémentaires (post-VLM) :**
+1. **Sidebar : troncature réelle des libellés au repos** (« Parcours d'apprentissage » 177>165 px, « Centre de connaissances » 175>165, et « Évaluation & compétences » 203>165 dès qu'inactif) — le kbd fantôme « g x » occupait 40 px en permanence. Corrections : sidebar w-64 → w-[268px] + kbd `hidden lg:group-hover:inline-flex` (n'apparaît qu'au survol, ne réserve plus d'espace au repos). Résultat mesuré : **0 libellé tronqué au repos** (215 px disponibles ≥ 203 px max) ; au survol le libellé s'ellipsera élégamment, le tooltip adjacent donne le nom complet + le raccourci. NOTE : la règle est protégée par `@media (hover: hover)` (Tailwind 4) → non testable en Chromium headless (qui déclare `hover: none`) mais correcte pour les utilisateurs réels ; à l'arrêt, vérifié au DOM (scrollWidth ≤ clientWidth partout, drawer mobile 375 px inclus).
+2. **Carte profil : avatar top-aligné** (sm:items-start + sm:mt-0.5) sur la première ligne de saisie — retour VLM conforme après correction.
+
+### Risques / recommandations pour la prochaine revue
+1. Le raccourci kbd du sidebar ne s'affiche que sur périphériques avec pointage fin (`hover: hover`) — comportement voulu (tablettes tactiles : masqué), mais non vérifiable en headless ; un test manuel utilisateur sur desktop confirmera l'apparition au survol.
+2. La salutation du dashboard dépend de l'heure locale du navigateur (« Bonne nuit » avant 5 h) — purement cosmétique.
+3. Pistes suivantes naturelles : (a) bouton « Copier » l'attestation en texte/presse-papiers ; (b) comparatif de performance par module dans la vue Évaluation (sparkline par domaine) ; (c) filtre par mode (guidé/mission/examen) dans le panneau du jour de la heatmap ; (d) raccourci clavier direct vers le jour « aujourd'hui » de la heatmap.
+4. Serveur dev : toujours le process double-fork (voir consignes CR-4).
+
+---

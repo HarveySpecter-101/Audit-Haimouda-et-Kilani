@@ -222,13 +222,14 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
   )
 }
 
-// Puce « identité du stagiaire » : avatar à initiales + nom, cliquable
-// vers les paramètres où le profil (nom de l'attestation) se modifie.
-// Partage la clé ['assessment-bootstrap'] avec l'Évaluation et le profil —
-// une seule requête réseau pour les trois consommateurs.
+// Puce « identité du stagiaire » : avatar à initiales + nom (poste visé
+// en complément à partir de md), cliquable vers les paramètres où le
+// profil (nom de l'attestation) se modifie. Partage la clé
+// ['assessment-bootstrap'] avec l'Évaluation et le profil — une seule
+// requête réseau pour les trois consommateurs.
 function LearnerChip() {
   const navigate = useSimulator((s) => s.navigate)
-  const boot = useQuery<{ profile?: { learnerName?: string } }>({
+  const boot = useQuery<{ profile?: { learnerName?: string; jobTitle?: string | null } }>({
     queryKey: ['assessment-bootstrap'],
     queryFn: async () => {
       const res = await fetch('/api/progress')
@@ -239,18 +240,20 @@ function LearnerChip() {
     staleTime: 60_000,
   })
   const name = boot.data?.profile?.learnerName ?? 'Collaborateur stagiaire'
+  const job = boot.data?.profile?.jobTitle
+  const label = job ? `${name} · ${job}` : name
   return (
     <button
       type="button"
       onClick={() => navigate('settings')}
-      aria-label={`Profil du stagiaire : ${name} — ouvrir les paramètres`}
-      title={`Profil : ${name} (cliquez pour modifier)`}
-      className="flex h-8 items-center gap-2 rounded-full border pl-1 pr-1 transition-colors hover:border-primary/50 hover:bg-accent/40 md:pr-3"
+      aria-label={`Profil du stagiaire : ${label} — ouvrir les paramètres`}
+      title={`Profil : ${label} (cliquez pour modifier)`}
+      className="flex h-8 max-w-56 items-center gap-2 rounded-full border pl-1 pr-1 transition-colors hover:border-primary/50 hover:bg-accent/40 md:pr-3"
     >
       <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] font-semibold text-primary ring-1 ring-primary/40">
         {initialsOf(name)}
       </span>
-      <span className="hidden max-w-32 truncate text-xs font-medium text-muted-foreground md:inline">{name}</span>
+      <span className="hidden max-w-44 truncate text-xs font-medium text-muted-foreground md:inline">{label}</span>
     </button>
   )
 }

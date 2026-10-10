@@ -1,0 +1,798 @@
+     1→'use client'
+     2→
+     3→import { useMemo, useState } from 'react'
+     4→import { useMutation, useQueryClient } from '@tanstack/react-query'
+     5→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+     6→import { Button } from '@/components/ui/button'
+     7→import { Badge } from '@/components/ui/badge'
+     8→import { Input } from '@/components/ui/input'
+     9→import { Textarea } from '@/components/ui/textarea'
+    10→import { Label } from '@/components/ui/label'
+    11→import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+    12→import { Checkbox } from '@/components/ui/checkbox'
+    13→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+    14→import { Separator } from '@/components/ui/separator'
+    15→import { ScrollArea } from '@/components/ui/scroll-area'
+    16→import { useSimulator } from '@/lib/store/simulator-store'
+    17→import { useToast } from '@/hooks/use-toast'
+    18→import { fmtEUR } from '@/lib/engine/format'
+    19→import { COMMON_ENTRY_ACCOUNTS, accountLabel } from '@/lib/engine/plan-comptable'
+    20→import { round2 } from '@/lib/engine/double-entry'
+    21→import type { AttemptFeedback } from '@/lib/types'
+    22→import {
+    23→  AlertTriangle,
+    24→  CheckCircle2,
+    25→  Eye,
+    26→  Lightbulb,
+    27→  ListChecks,
+    28→  RefreshCw,
+    29→  Send,
+    30→  XCircle,
+    31→} from 'lucide-react'
+    32→
+    33→// ============================================================
+    34→// EXERCICE RUNNER — rend tous les types d'exercices et soumet
+    35→// les réponses au moteur de correction serveur (/api/attempts).
+    36→// Les solutions ne sont JAMAIS côté client.
+    37→// ============================================================
+    38→
+    39→export interface SafeExerciseData {
+    40→  key: string
+    41→  path: 'A' | 'B'
+    42→  moduleCode: string
+    43→  kind: 'qcm' | 'entry' | 'calculation' | 'matching' | 'detection' | 'ordering' | 'essay' | 'case'
+    44→  difficulty: 'SHORT' | 'INTERMEDIATE' | 'SYNTHESIS'
+    45→  title: string
+    46→  prompt: string
+    47→  context?: string
+    48→  documents?: string[]
+    49→  points: number
+    50→  critical?: boolean
+    51→  skills: string[]
+    52→  hints: string[]
+    53→  method: string
+    54→  hasExample: boolean
+    55→  exampleSolution?: string
+    56→  // spécifiques
+    57→  choices?: { id: string; text: string }[]
+    58→  multi?: boolean
+    59→  expectedJournal?: string
+    60→  fields?: { id: string; label: string; unit?: string }[]
+    61→  left?: { id: string; label: string }[]
+    62→  right?: { id: string; label: string }[]
+    63→  candidates?: { id: string; label: string; meta?: string }[]
+    64→  items?: { id: string; label: string }[]
+    65→  minWords?: number
+    66→  steps?: { id: string; kind: string; title: string; prompt: string }[]
+    67→}
+    68→
+    69→export interface AttemptInputDTO {
+    70→  qcm?: { choiceIds: string[] }
+    71→  entry?: { journal: string; date?: string; lines: { accountCode: string; debit: number; credit: number; label?: string }[] }
+    72→  calculation?: Record<string, number>
+    73→  matching?: Record<string, string>
+    74→  detection?: { ids: string[] }
+    75→  ordering?: { ids: string[] }
+    76→  essay?: { text: string }
+    77→  case?: { steps: Record<string, unknown> }
+    78→}
+    79→
+    80→export function ExerciseRunner({ exercise }: { exercise: SafeExerciseData }) {
+    81→  const { toast } = useToast()
+    82→  const queryClient = useQueryClient()
+    83→  const mode = useSimulator((s) => s.mode)
+    84→  const [answer, setAnswer] = useState<AttemptInputDTO>({})
+    85→  const [feedback, setFeedback] = useState<AttemptFeedback | null>(null)
+    86→  const [hintLevel, setHintLevel] = useState(0)
+    87→  const [showExample, setShowExample] = useState(false)
+    88→  const [attempted, setAttempted] = useState(false)
+    89→
+    90→  const mutation = useMutation({
+    91→    mutationFn: async () => {
+    92→      const res = await fetch('/api/attempts', {
+    93→        method: 'POST',
+    94→        headers: { 'Content-Type': 'application/json' },
+    95→        body: JSON.stringify({ exerciseKey: exercise.key, answer, usedHints: hintLevel, mode }),
+    96→      })
+    97→      if (!res.ok) throw new Error('Erreur de correction')
+    98→      return res.json() as Promise<{ feedback: AttemptFeedback }>
+    99→    },
+   100→    onSuccess: (data) => {
+   101→      setFeedback(data.feedback)
+   102→      setAttempted(true)
+   103→      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+   104→      queryClient.invalidateQueries({ queryKey: ['attempts'] })
+   105→      queryClient.invalidateQueries({ queryKey: ['progress'] })
+   106→      if (data.feedback.passed) {
+   107→        toast({ title: 'Exercice réussi', description: `Score : ${Math.round(data.feedback.score * 100)} %` })
+   108→      } else {
+   109→        toast({
+   110→          title: 'Tentative enregistrée',
+   111→          description: 'Lisez le feedback et retentez : les tentatives multiples sont autorisées.',
+   112→          variant: 'destructive',
+   113→        })
+   114→      }
+   115→    },
+   116→    onError: () => {
+   117→      toast({ title: 'Erreur', description: 'La correction a échoué. Réessayez.', variant: 'destructive' })
+   118→    },
+   119→  })
+   120→
+   121→  const difficultyLabel = useMemo(
+   122→    () =>
+   123→      ({ SHORT: 'Cas court', INTERMEDIATE: 'Intermédiaire', SYNTHESIS: 'Cas de synthèse' })[exercise.difficulty] ??
+   124→      exercise.difficulty,
+   125→    [exercise.difficulty],
+   126→  )
+   127→
+   128→  const canSubmit = useMemo(() => {
+   129→    switch (exercise.kind) {
+   130→      case 'qcm':
+   131→        return (answer.qcm?.choiceIds?.length ?? 0) > 0
+   132→      case 'entry':
+   133→        return (answer.entry?.lines?.length ?? 0) >= 2
+   134→      case 'calculation':
+   135→        return Object.keys(answer.calculation ?? {}).length >= (exercise.fields?.length ?? 1)
+   136→      case 'matching':
+   137→        return Object.keys(answer.matching ?? {}).length >= (exercise.left?.length ?? 1)
+   138→      case 'detection':
+   139→        return true
+   140→      case 'ordering':
+   141→        return (answer.ordering?.ids?.length ?? 0) === (exercise.items?.length ?? 1)
+   142→      case 'essay':
+   143→        return (answer.essay?.text?.trim().length ?? 0) > 20
+   144→      case 'case':
+   145→        return true
+   146→      default:
+   147→        return false
+   148→    }
+   149→  }, [answer, exercise])
+   150→
+   151→  return (
+   152→    <Card className="gap-4">
+   153→      <CardHeader className="pb-3">
+   154→        <div className="flex flex-wrap items-center gap-2">
+   155→          <CardTitle className="text-base">{exercise.title}</CardTitle>
+   156→          <Badge variant="outline">{difficultyLabel}</Badge>
+   157→          <Badge variant="secondary">{exercise.points} pts</Badge>
+   158→          {exercise.critical ? <Badge className="gap-1"><AlertTriangle className="size-3" /> Critique</Badge> : null}
+   159→        </div>
+   160→        {exercise.context ? <p className="text-sm text-muted-foreground">{exercise.context}</p> : null}
+   161→        {exercise.documents?.length ? (
+   162→          <p className="text-xs text-muted-foreground">
+   163→            Pièces à consulter (centre documentaire) : {exercise.documents.join(', ')}
+   164→          </p>
+   165→        ) : null}
+   166→      </CardHeader>
+   167→      <CardContent className="space-y-4">
+   168→        <p className="text-sm leading-relaxed">{exercise.prompt}</p>
+   169→
+   170→        <ExerciseBody exercise={exercise} answer={answer} setAnswer={setAnswer} disabled={attempted && (feedback?.passed ?? false)} />
+   171→
+   172→        <Separator />
+   173→
+   174→        <div className="flex flex-wrap items-center gap-2">
+   175→          <Button
+   176→            onClick={() => mutation.mutate()}
+   177→            disabled={!canSubmit || mutation.isPending || (attempted && (feedback?.passed ?? false))}
+   178→            className="gap-1.5"
+   179→          >
+   180→            <Send className="size-4" />
+   181→            {mutation.isPending ? 'Correction…' : 'Soumettre ma réponse'}
+   182→          </Button>
+   183→          {exercise.hints.length > 0 ? (
+   184→            <Button
+   185→              variant="outline"
+   186→              size="sm"
+   187→              className="gap-1.5"
+   188→              onClick={() => setHintLevel(Math.min(exercise.hints.length, hintLevel + 1))}
+   189→              disabled={hintLevel >= exercise.hints.length}
+   190→            >
+   191→              <Lightbulb className="size-3.5" /> Indice ({hintLevel}/{exercise.hints.length})
+   192→            </Button>
+   193→          ) : null}
+   194→          {exercise.hasExample ? (
+   195→            <Button
+   196→              variant="ghost"
+   197→              size="sm"
+   198→              className="gap-1.5"
+   199→              onClick={() => setShowExample(!showExample)}
+   200→              disabled={!attempted}
+   201→              title={attempted ? 'Exemple corrigé (après une tentative)' : 'Disponible après une tentative'}
+   202→            >
+   203→              <Eye className="size-3.5" /> Exemple corrigé
+   204→            </Button>
+   205→          ) : null}
+   206→          {attempted && !feedback?.passed ? (
+   207→            <Button
+   208→              variant="ghost"
+   209→              size="sm"
+   210→              className="gap-1.5"
+   211→              onClick={() => {
+   212→                setFeedback(null)
+   213→                setAttempted(false)
+   214→                setAnswer({})
+   215→              }}
+   216→            >
+   217→              <RefreshCw className="size-3.5" /> Recommencer
+   218→            </Button>
+   219→          ) : null}
+   220→        </div>
+   221→
+   222→        {hintLevel > 0 && (
+   223→          <div className="space-y-1 rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950">
+   224→            {exercise.hints.slice(0, hintLevel).map((h, i) => (
+   225→              <p key={i} className="text-sm text-amber-900 dark:text-amber-200">
+   226→                <span className="font-semibold">Indice {i + 1} : </span>
+   227→                {h}
+   228→              </p>
+   229→            ))}
+   230→          </div>
+   231→        )}
+   232→
+   233→        {showExample && exercise.exampleSolution ? (
+   234→          <div className="rounded-md border bg-muted p-3">
+   235→            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Exemple corrigé</p>
+   236→            <p className="font-mono text-xs">{exercise.exampleSolution}</p>
+   237→          </div>
+   238→        ) : null}
+   239→
+   240→        {feedback ? <FeedbackPanel feedback={feedback} /> : null}
+   241→      </CardContent>
+   242→    </Card>
+   243→  )
+   244→}
+   245→
+   246→// ==================== Corps selon le type ====================
+   247→
+   248→function ExerciseBody({
+   249→  exercise,
+   250→  answer,
+   251→  setAnswer,
+   252→  disabled,
+   253→}: {
+   254→  exercise: SafeExerciseData
+   255→  answer: AttemptInputDTO
+   256→  setAnswer: (a: AttemptInputDTO) => void
+   257→  disabled: boolean
+   258→}) {
+   259→  switch (exercise.kind) {
+   260→    case 'qcm':
+   261→      return <QcmBody exercise={exercise} answer={answer} setAnswer={setAnswer} disabled={disabled} />
+   262→    case 'entry':
+   263→      return <EntryBody answer={answer} setAnswer={setAnswer} disabled={disabled} />
+   264→    case 'calculation':
+   265→      return <CalculationBody exercise={exercise} answer={answer} setAnswer={setAnswer} disabled={disabled} />
+   266→    case 'matching':
+   267→      return <MatchingBody exercise={exercise} answer={answer} setAnswer={setAnswer} disabled={disabled} />
+   268→    case 'detection':
+   269→      return <DetectionBody exercise={exercise} answer={answer} setAnswer={setAnswer} disabled={disabled} />
+   270→    case 'ordering':
+   271→      return <OrderingBody exercise={exercise} answer={answer} setAnswer={setAnswer} disabled={disabled} />
+   272→    case 'essay':
+   273→      return <EssayBody exercise={exercise} answer={answer} setAnswer={setAnswer} disabled={disabled} />
+   274→    case 'case':
+   275→      return <CaseBody exercise={exercise} answer={answer} setAnswer={setAnswer} disabled={disabled} />
+   276→    default:
+   277→      return null
+   278→  }
+   279→}
+   280→
+   281→function QcmBody({
+   282→  exercise,
+   283→  answer,
+   284→  setAnswer,
+   285→  disabled,
+   286→}: {
+   287→  exercise: SafeExerciseData
+   288→  answer: AttemptInputDTO
+   289→  setAnswer: (a: AttemptInputDTO) => void
+   290→  disabled: boolean
+   291→}) {
+   292→  const selected = answer.qcm?.choiceIds ?? []
+   293→  const toggle = (id: string) => {
+   294→    if (disabled) return
+   295→    const next = exercise.multi
+   296→      ? selected.includes(id)
+   297→        ? selected.filter((s) => s !== id)
+   298→        : [...selected, id]
+   299→      : [id]
+   300→    setAnswer({ ...answer, qcm: { choiceIds: next } })
+   301→  }
+   302→  if (exercise.multi) {
+   303→    return (
+   304→      <div className="space-y-2">
+   305→        {exercise.choices?.map((c) => (
+   306→          <label key={c.id} className="flex cursor-pointer items-start gap-2.5 rounded-md border p-3 text-sm hover:bg-accent/40">
+   307→            <Checkbox checked={selected.includes(c.id)} onCheckedChange={() => toggle(c.id)} disabled={disabled} />
+   308→            <span>{c.text}</span>
+   309→          </label>
+   310→        ))}
+   311→        <p className="text-xs text-muted-foreground">Plusieurs réponses possibles.</p>
+   312→      </div>
+   313→    )
+   314→  }
+   315→  return (
+   316→    <RadioGroup value={selected[0] ?? ''} onValueChange={(v) => !disabled && setAnswer({ ...answer, qcm: { choiceIds: [v] } })} className="gap-2">
+   317→      {exercise.choices?.map((c) => (
+   318→        <label key={c.id} className="flex cursor-pointer items-start gap-2.5 rounded-md border p-3 text-sm hover:bg-accent/40">
+   319→          <RadioGroupItem value={c.id} disabled={disabled} />
+   320→          <span>{c.text}</span>
+   321→        </label>
+   322→      ))}
+   323→    </RadioGroup>
+   324→  )
+   325→}
+   326→
+   327→interface DraftLine {
+   328→  accountCode: string
+   329→  label: string
+   330→  debit: string
+   331→  credit: string
+   332→}
+   333→
+   334→function EntryBody({
+   335→  answer,
+   336→  setAnswer,
+   337→  disabled,
+   338→}: {
+   339→  answer: AttemptInputDTO
+   340→  setAnswer: (a: AttemptInputDTO) => void
+   341→  disabled: boolean
+   342→}) {
+   343→  const [journal, setJournal] = useState(answer.entry?.journal ?? 'ACH')
+   344→  const [lines, setLines] = useState<DraftLine[]>(
+   345→    answer.entry?.lines?.map((l) => ({
+   346→      accountCode: l.accountCode,
+   347→      label: l.label ?? '',
+   348→      debit: l.debit ? String(l.debit) : '',
+   349→      credit: l.credit ? String(l.credit) : '',
+   350→    })) ?? [
+   351→      { accountCode: '', label: '', debit: '', credit: '' },
+   352→      { accountCode: '', label: '', debit: '', credit: '' },
+   353→      { accountCode: '', label: '', debit: '', credit: '' },
+   354→    ],
+   355→  )
+   356→
+   357→  const totalDebit = round2(lines.reduce((a, l) => a + (Number(l.debit.replace(',', '.')) || 0), 0))
+   358→  const totalCredit = round2(lines.reduce((a, l) => a + (Number(l.credit.replace(',', '.')) || 0), 0))
+   359→  const balanced = Math.abs(totalDebit - totalCredit) < 0.005 && totalDebit > 0
+   360→
+   361→  const pushToAnswer = (nextLines: DraftLine[], nextJournal: string) => {
+   362→    setAnswer({
+   363→      ...answer,
+   364→      entry: {
+   365→        journal: nextJournal,
+   366→        lines: nextLines
+   367→          .filter((l) => l.accountCode && (Number(l.debit.replace(',', '.')) > 0 || Number(l.credit.replace(',', '.')) > 0))
+   368→          .map((l) => ({
+   369→            accountCode: l.accountCode,
+   370→            label: l.label,
+   371→            debit: Number(l.debit.replace(',', '.')) || 0,
+   372→            credit: Number(l.credit.replace(',', '.')) || 0,
+   373→          })),
+   374→      },
+   375→    })
+   376→  }
+   377→
+   378→  const updateLine = (i: number, patch: Partial<DraftLine>) => {
+   379→    const next = lines.map((l, idx) => (idx === i ? { ...l, ...patch } : l))
+   380→    setLines(next)
+   381→    pushToAnswer(next, journal)
+   382→  }
+   383→
+   384→  return (
+   385→    <div className="space-y-3">
+   386→      <div className="flex flex-wrap items-center gap-3">
+   387→        <div className="w-40">
+   388→          <Label className="text-xs">Journal</Label>
+   389→          <Select value={journal} onValueChange={(v) => { setJournal(v); pushToAnswer(lines, v) }} disabled={disabled}>
+   390→            <SelectTrigger><SelectValue /></SelectTrigger>
+   391→            <SelectContent>
+   392→              {['ACH', 'VTE', 'BQE', 'CAI', 'OD', 'PAIE'].map((j) => (
+   393→                <SelectItem key={j} value={j}>{j}</SelectItem>
+   394→              ))}
+   395→            </SelectContent>
+   396→          </Select>
+   397→        </div>
+   398→        <div className="ml-auto flex items-center gap-3 text-sm">
+   399→          <span className="tabular-nums">
+   400→            Σ Débit <strong className={balanced ? 'text-emerald-700' : 'text-red-700'}>{fmtEUR(totalDebit)}</strong>
+   401→          </span>
+   402→          <span className="tabular-nums">
+   403→            Σ Crédit <strong className={balanced ? 'text-emerald-700' : 'text-red-700'}>{fmtEUR(totalCredit)}</strong>
+   404→          </span>
+   405→          {balanced ? (
+   406→            <Badge className="gap-1 bg-emerald-600"><CheckCircle2 className="size-3" /> Équilibrée</Badge>
+   407→          ) : (
+   408→            <Badge variant="destructive" className="gap-1"><XCircle className="size-3" /> Déséquilibrée</Badge>
+   409→          )}
+   410→        </div>
+   411→      </div>
+   412→      <div className="overflow-x-auto">
+   413→        <table className="w-full min-w-[640px] text-sm">
+   414→          <thead>
+   415→            <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
+   416→              <th className="pb-2 pr-2">Compte</th>
+   417→              <th className="pb-2 pr-2">Libellé</th>
+   418→              <th className="pb-2 pr-2 w-28 text-right">Débit</th>
+   419→              <th className="pb-2 pr-2 w-28 text-right">Crédit</th>
+   420→            </tr>
+   421→          </thead>
+   422→          <tbody>
+   423→            {lines.map((l, i) => (
+   424→              <tr key={i} className="border-b border-dashed">
+   425→                <td className="py-1.5 pr-2">
+   426→                  <Select value={l.accountCode} onValueChange={(v) => updateLine(i, { accountCode: v })} disabled={disabled}>
+   427→                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Choisir…" /></SelectTrigger>
+   428→                    <SelectContent>
+   429→                      <ScrollArea className="h-64">
+   430→                        {COMMON_ENTRY_ACCOUNTS.map((code) => (
+   431→                          <SelectItem key={code} value={code} className="text-xs">
+   432→                            {code} — {accountLabel(code).slice(0, 44)}
+   433→                          </SelectItem>
+   434→                        ))}
+   435→                      </ScrollArea>
+   436→                    </SelectContent>
+   437→                  </Select>
+   438→                </td>
+   439→                <td className="py-1.5 pr-2">
+   440→                  <Input
+   441→                    value={l.label}
+   442→                    onChange={(e) => updateLine(i, { label: e.target.value })}
+   443→                    placeholder="Libellé de ligne"
+   444→                    className="h-8 text-xs"
+   445→                    disabled={disabled}
+   446→                  />
+   447→                </td>
+   448→                <td className="py-1.5 pr-2">
+   449→                  <Input
+   450→                    value={l.debit}
+   451→                    onChange={(e) => updateLine(i, { debit: e.target.value })}
+   452→                    placeholder="0,00"
+   453→                    className="h-8 text-right text-xs tabular-nums"
+   454→                    inputMode="decimal"
+   455→                    disabled={disabled}
+   456→                  />
+   457→                </td>
+   458→                <td className="py-1.5 pr-2">
+   459→                  <Input
+   460→                    value={l.credit}
+   461→                    onChange={(e) => updateLine(i, { credit: e.target.value })}
+   462→                    placeholder="0,00"
+   463→                    className="h-8 text-right text-xs tabular-nums"
+   464→                    inputMode="decimal"
+   465→                    disabled={disabled}
+   466→                  />
+   467→                </td>
+   468→              </tr>
+   469→            ))}
+   470→          </tbody>
+   471→        </table>
+   472→      </div>
+   473→      <Button
+   474→        variant="outline"
+   475→        size="sm"
+   476→        onClick={() => setLines([...lines, { accountCode: '', label: '', debit: '', credit: '' }])}
+   477→        disabled={disabled}
+   478→      >
+   479→        + Ajouter une ligne
+   480→      </Button>
+   481→      <p className="text-xs text-muted-foreground">
+   482→        La saisie est refusée si l&apos;écriture est déséquilibrée : Σ débits = Σ crédits (partie double). Vérifiez la TVA
+   483→        avant de soumettre.
+   484→      </p>
+   485→    </div>
+   486→  )
+   487→}
+   488→
+   489→function CalculationBody({
+   490→  exercise,
+   491→  answer,
+   492→  setAnswer,
+   493→  disabled,
+   494→}: {
+   495→  exercise: SafeExerciseData
+   496→  answer: AttemptInputDTO
+   497→  setAnswer: (a: AttemptInputDTO) => void
+   498→  disabled: boolean
+   499→}) {
+   500→  const calc = answer.calculation ?? {}
+   501→  return (
+   502→    <div className="grid gap-3 sm:grid-cols-2">
+   503→      {exercise.fields?.map((f) => (
+   504→        <div key={f.id} className="space-y-1">
+   505→          <Label htmlFor={`calc-${f.id}`} className="text-xs">
+   506→            {f.label} {f.unit ? `(${f.unit})` : ''}
+   507→          </Label>
+   508→          <Input
+   509→            id={`calc-${f.id}`}
+   510→            value={calc[f.id] !== undefined ? String(calc[f.id]) : ''}
+   511→            onChange={(e) =>
+   512→              setAnswer({ ...answer, calculation: { ...calc, [f.id]: Number(e.target.value.replace(',', '.')) || 0 } })
+   513→            }
+   514→            placeholder="0,00"
+   515→            inputMode="decimal"
+   516→            className="tabular-nums"
+   517→            disabled={disabled}
+   518→          />
+   519→        </div>
+   520→      ))}
+   521→    </div>
+   522→  )
+   523→}
+   524→
+   525→function MatchingBody({
+   526→  exercise,
+   527→  answer,
+   528→  setAnswer,
+   529→  disabled,
+   530→}: {
+   531→  exercise: SafeExerciseData
+   532→  answer: AttemptInputDTO
+   533→  setAnswer: (a: AttemptInputDTO) => void
+   534→  disabled: boolean
+   535→}) {
+   536→  const matching = answer.matching ?? {}
+   537→  return (
+   538→    <div className="space-y-2">
+   539→      {exercise.left?.map((l) => (
+   540→        <div key={l.id} className="flex flex-wrap items-center gap-2 rounded-md border p-2.5 text-sm">
+   541→          <span className="min-w-40 flex-1">{l.label}</span>
+   542→          <span className="text-muted-foreground">→</span>
+   543→          <div className="w-56">
+   544→            <Select
+   545→              value={matching[l.id] ?? ''}
+   546→              onValueChange={(v) => !disabled && setAnswer({ ...answer, matching: { ...matching, [l.id]: v } })}
+   547→              disabled={disabled}
+   548→            >
+   549→              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Associer…" /></SelectTrigger>
+   550→              <SelectContent>
+   551→                {exercise.right?.map((r) => (
+   552→                  <SelectItem key={r.id} value={r.id} className="text-xs">{r.label}</SelectItem>
+   553→                ))}
+   554→              </SelectContent>
+   555→            </Select>
+   556→          </div>
+   557→        </div>
+   558→      ))}
+   559→    </div>
+   560→  )
+   561→}
+   562→
+   563→function DetectionBody({
+   564→  exercise,
+   565→  answer,
+   566→  setAnswer,
+   567→  disabled,
+   568→}: {
+   569→  exercise: SafeExerciseData
+   570→  answer: AttemptInputDTO
+   571→  setAnswer: (a: AttemptInputDTO) => void
+   572→  disabled: boolean
+   573→}) {
+   574→  const selected = answer.detection?.ids ?? []
+   575→  const toggle = (id: string) => {
+   576→    if (disabled) return
+   577→    const next = selected.includes(id) ? selected.filter((s) => s !== id) : [...selected, id]
+   578→    setAnswer({ ...answer, detection: { ids: next } })
+   579→  }
+   580→  return (
+   581→    <div className="space-y-2">
+   582→      <p className="text-xs text-muted-foreground">Cochez les éléments anormaux (et uniquement eux).</p>
+   583→      {exercise.candidates?.map((c) => (
+   584→        <label key={c.id} className="flex cursor-pointer items-start gap-2.5 rounded-md border p-3 text-sm hover:bg-accent/40">
+   585→          <Checkbox checked={selected.includes(c.id)} onCheckedChange={() => toggle(c.id)} disabled={disabled} />
+   586→          <div>
+   587→            <p>{c.label}</p>
+   588→            {c.meta ? <p className="text-xs text-muted-foreground">{c.meta}</p> : null}
+   589→          </div>
+   590→        </label>
+   591→      ))}
+   592→    </div>
+   593→  )
+   594→}
+   595→
+   596→function OrderingBody({
+   597→  exercise,
+   598→  answer,
+   599→  setAnswer,
+   600→  disabled,
+   601→}: {
+   602→  exercise: SafeExerciseData
+   603→  answer: AttemptInputDTO
+   604→  setAnswer: (a: AttemptInputDTO) => void
+   605→  disabled: boolean
+   606→}) {
+   607→  const selected = answer.ordering?.ids ?? []
+   608→  const items = exercise.items ?? []
+   609→  const move = (id: string, dir: -1 | 1) => {
+   610→    if (disabled) return
+   611→    const idx = selected.indexOf(id)
+   612→    const next = [...selected]
+   613→    const target = idx + dir
+   614→    if (idx >= 0 && target >= 0 && target < next.length) {
+   615→      ;[next[idx], next[target]] = [next[target], next[idx]]
+   616→      setAnswer({ ...answer, ordering: { ids: next } })
+   617→    }
+   618→  }
+   619→  const add = (id: string) => {
+   620→    if (disabled || selected.includes(id)) return
+   621→    setAnswer({ ...answer, ordering: { ids: [...selected, id] } })
+   622→  }
+   623→  return (
+   624→    <div className="grid gap-4 sm:grid-cols-2">
+   625→      <div className="space-y-1.5">
+   626→        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Disponibles</p>
+   627→        {items
+   628→          .filter((it) => !selected.includes(it.id))
+   629→          .map((it) => (
+   630→            <button
+   631→              key={it.id}
+   632→              className="flex w-full items-center justify-between rounded-md border p-2 text-left text-sm hover:bg-accent/40"
+   633→              onClick={() => add(it.id)}
+   634→            >
+   635→              <span>{it.label}</span>
+   636→              <span className="text-xs text-muted-foreground">+ ajouter</span>
+   637→            </button>
+   638→          ))}
+   639→      </div>
+   640→      <div className="space-y-1.5">
+   641→        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ordre proposé</p>
+   642→        {selected.map((id, i) => {
+   643→          const it = items.find((x) => x.id === id)
+   644→          return (
+   645→            <div key={id} className="flex items-center gap-2 rounded-md border p-2 text-sm">
+   646→              <span className="tabular-nums w-5 text-center text-xs text-muted-foreground">{i + 1}</span>
+   647→              <span className="flex-1">{it?.label}</span>
+   648→              <span className="flex gap-0.5">
+   649→                <Button variant="ghost" size="icon" className="size-6" onClick={() => move(id, -1)} aria-label="Monter">↑</Button>
+   650→                <Button variant="ghost" size="icon" className="size-6" onClick={() => move(id, 1)} aria-label="Descendre">↓</Button>
+   651→              </span>
+   652→            </div>
+   653→          )
+   654→        })}
+   655→      </div>
+   656→    </div>
+   657→  )
+   658→}
+   659→
+   660→function EssayBody({
+   661→  exercise,
+   662→  answer,
+   663→  setAnswer,
+   664→  disabled,
+   665→}: {
+   666→  exercise: SafeExerciseData
+   667→  answer: AttemptInputDTO
+   668→  setAnswer: (a: AttemptInputDTO) => void
+   669→  disabled: boolean
+   670→}) {
+   671→  const text = answer.essay?.text ?? ''
+   672→  const words = text.trim().split(/\s+/).filter(Boolean).length
+   673→  return (
+   674→    <div className="space-y-2">
+   675→      <Label htmlFor="essay" className="text-xs">
+   676→        Rédigez votre conclusion documentée (min. {exercise.minWords ?? 80} mots — {words} actuellement)
+   677→      </Label>
+   678→      <Textarea
+   679→        id="essay"
+   680→        value={text}
+   681→        onChange={(e) => !disabled && setAnswer({ ...answer, essay: { text: e.target.value } })}
+   682→        placeholder="Objectif → travaux réalisés → éléments obtenus → conclusion → limite…"
+   683→        className="min-h-40"
+   684→        disabled={disabled}
+   685→      />
+   686→    </div>
+   687→  )
+   688→}
+   689→
+   690→function CaseBody({
+   691→  exercise,
+   692→  answer,
+   693→  setAnswer,
+   694→  disabled,
+   695→}: {
+   696→  exercise: SafeExerciseData
+   697→  answer: AttemptInputDTO
+   698→  setAnswer: (a: AttemptInputDTO) => void
+   699→  disabled: boolean
+   700→}) {
+   701→  const steps = answer.case?.steps ?? {}
+   702→  const setStep = (id: string, value: unknown) => {
+   703→    setAnswer({ ...answer, case: { steps: { ...steps, [id]: value } } })
+   704→  }
+   705→  return (
+   706→    <div className="space-y-3">
+   707→      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+   708→        <ListChecks className="size-3.5" /> Cas multi-étapes : répondez à chaque étape puis soumettez l&apos;ensemble.
+   709→      </p>
+   710→      {exercise.steps?.map((s, i) => (
+   711→        <div key={s.id} className="rounded-md border p-3">
+   712→          <p className="text-sm font-medium">
+   713→            Étape {i + 1} — {s.title}
+   714→          </p>
+   715→          <p className="mb-2 text-sm text-muted-foreground">{s.prompt}</p>
+   716→          {s.kind === 'qcm' ? (
+   717→            <QcmBody
+   718→              exercise={{
+   719→                ...exercise,
+   720→                choices: (s as unknown as { choices?: { id: string; text: string }[] }).choices ?? [],
+   721→                multi: false,
+   722→              }}
+   723→              answer={steps[s.id] as AttemptInputDTO}
+   724→              setAnswer={(a) => setStep(s.id, a)}
+   725→              disabled={disabled}
+   726→            />
+   727→          ) : s.kind === 'essay' ? (
+   728→            <EssayBody
+   729→              exercise={{ ...exercise, minWords: 30 }}
+   730→              answer={steps[s.id] as AttemptInputDTO}
+   731→              setAnswer={(a) => setStep(s.id, a)}
+   732→              disabled={disabled}
+   733→            />
+   734→          ) : (
+   735→            <Textarea
+   736→              value={typeof steps[s.id] === 'string' ? (steps[s.id] as string) : ''}
+   737→              onChange={(e) => setStep(s.id, e.target.value)}
+   738→              placeholder="Votre réponse…"
+   739→              disabled={disabled}
+   740→            />
+   741→          )}
+   742→        </div>
+   743→      ))}
+   744→    </div>
+   745→  )
+   746→}
+   747→
+   748→// ==================== Feedback ====================
+   749→
+   750→function FeedbackPanel({ feedback }: { feedback: AttemptFeedback }) {
+   751→  return (
+   752→    <div
+   753→      className={`space-y-3 rounded-lg border p-4 ${
+   754→        feedback.passed
+   755→          ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950'
+   756→          : 'border-amber-300 bg-amber-50 dark:border-amber-900 dark:bg-amber-950'
+   757→      }`}
+   758→      role="status"
+   759→      aria-live="polite"
+   760→    >
+   761→      <div className="flex flex-wrap items-center gap-2">
+   762→        {feedback.passed ? (
+   763→          <Badge className="gap-1 bg-emerald-600"><CheckCircle2 className="size-3" /> Réussi</Badge>
+   764→        ) : (
+   765→          <Badge className="gap-1 bg-amber-600"><AlertTriangle className="size-3" /> À retravailler</Badge>
+   766→        )}
+   767→        <span className="tabular-nums text-sm font-semibold">Score : {Math.round(feedback.score * 100)} %</span>
+   768→        {feedback.criticalError ? (
+   769→          <Badge variant="destructive" className="gap-1"><AlertTriangle className="size-3" /> Erreur critique</Badge>
+   770→        ) : null}
+   771→      </div>
+   772→      {feedback.explanation ? (
+   773→        <div className="space-y-1 text-sm">
+   774→          {feedback.explanation.split('\n').map((line, i) =>
+   775→            line.trim() ? <p key={i}>{line}</p> : null,
+   776→          )}
+   777→        </div>
+   778→      ) : null}
+   779→      <div className="rounded-md bg-background/60 p-2.5 text-sm">
+   780→        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+   781→          Réflexe de collaborateur expérimenté
+   782→        </p>
+   783→        <p>{feedback.expertNote}</p>
+   784→      </div>
+   785→      {feedback.remediation?.length ? (
+   786→        <div className="text-sm">
+   787→          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Remédiation</p>
+   788→          <ul className="list-disc space-y-0.5 pl-4">
+   789→            {feedback.remediation.map((r, i) => (
+   790→              <li key={i}>{r}</li>
+   791→            ))}
+   792→          </ul>
+   793→        </div>
+   794→      ) : null}
+   795→    </div>
+   796→  )
+   797→}
+   798→

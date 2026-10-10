@@ -1,0 +1,661 @@
+     1→**ACCOUNTING\
+     2→& AUDIT\
+     3→SIMULATOR**
+     4→
+     5→**Cahier des charges et prompt maître pour GLM 5.2 / 5.3**
+     6→
+     7→*Un environnement interactif de formation professionnelle\
+     8→Comptabilité d'abord • Audit externe ensuite • Préparation au stage PFE
+     9→en France*
+    10→
+    11→  -----------------------------------------------------------------------
+    12→  **OBJECTIF\
+    13→  Créer un site pédagogique réellement fonctionnel qui transforme les
+    14→  notions comptables et d'audit en compétences démontrables : données
+    15→  cohérentes, documents de travail, décisions, contrôles, corrections,
+    16→  conclusions et évaluation progressive.**
+    17→  -----------------------------------------------------------------------
+    18→
+    19→  -----------------------------------------------------------------------
+    20→
+    21→Document à copier/transmettre dans son intégralité à GLM.
+    22→
+    23→# Comment utiliser ce document
+    24→
+    25→Transmets à GLM l'intégralité de ce document et demande-lui de respecter
+    26→les exigences dans leur ensemble. Le livrable attendu est un site
+    27→interactif exploitable, pas uniquement une maquette, un plan ou une
+    28→longue réponse contenant du code incomplet.
+    29→
+    30→Si le modèle ne peut pas produire le projet complet en une seule
+    31→réponse, il doit organiser la génération en lots cohérents, conserver
+    32→une architecture unique et livrer tous les fichiers nécessaires. Il ne
+    33→doit jamais remplacer une fonctionnalité demandée par un bouton factice.
+    34→
+    35→Le parcours est volontairement organisé dans cet ordre : 1) comptabilité
+    36→; 2) audit externe. Les deux parcours utilisent une entreprise fictive
+    37→cohérente afin de montrer comment les comptes produits et révisés en
+    38→comptabilité deviennent ensuite les données examinées par l'auditeur.
+    39→
+    40→# PROMPT MAÎTRE --- À EXÉCUTER PAR GLM
+    41→
+    42→Tu es une équipe pluridisciplinaire réunissant un expert-comptable
+    43→français, un responsable de mission en cabinet, un manager d'audit
+    44→externe, un formateur de stagiaires PFE, un spécialiste de la pédagogie
+    45→par la pratique, un concepteur UX/UI et un ingénieur logiciel senior. Tu
+    46→dois concevoir, développer, tester et livrer un site web de formation
+    47→professionnelle extrêmement complet nommé « Accounting & Audit Simulator
+    48→».
+    49→
+    50→Le site doit faire progresser un apprenant depuis les bases jusqu'à une
+    51→autonomie pratique avancée en comptabilité et en audit externe, selon un
+    52→parcours structuré, mesurable et progressif. Ne promets pas une
+    53→compétence réelle de 100 % : mesure plutôt la maîtrise démontrée, les
+    54→lacunes restantes et les tâches que l'apprenant sait réaliser seul.
+    55→L'expérience réelle, la supervision et la validation par des
+    56→professionnels restent indispensables.
+    57→
+    58→Le contexte principal est celui de la France : Plan comptable général
+    59→(PCG), règles comptables françaises, fiscalité française, obligations
+    60→pertinentes, commissariat aux comptes et NEP applicables. Distingue
+    61→toujours la réglementation, les recommandations professionnelles, les
+    62→pratiques internes d'un cabinet et les hypothèses pédagogiques. Ne
+    63→mélange pas PCG et IFRS. Présente les IFRS dans un espace comparatif
+    64→séparé lorsqu'elles sont utiles.
+    65→
+    66→## 1. Résultat attendu et exigences non négociables
+    67→
+    68→-   Créer un site web complet, utilisable et interactif, avec une
+    69→    navigation cohérente entre tous les modules.
+    70→
+    71→-   Livrer les fichiers réellement nécessaires au fonctionnement du site
+    72→    et indiquer précisément comment le lancer.
+    73→
+    74→-   Toutes les interactions annoncées doivent fonctionner : saisie,
+    75→    validation, calcul, filtres, recherche, progression, sauvegarde,
+    76→    import/export et génération de livrables.
+    77→
+    78→-   Aucune donnée ne doit être simplement décorative : les écritures
+    79→    doivent alimenter les journaux, le grand livre, la balance et les
+    80→    états financiers ; les résultats des exercices doivent influencer
+    81→    les compétences et la progression.
+    82→
+    83→-   Construire une expérience pédagogique par tâches, documents,
+    84→    décisions, retours correctifs et livrables professionnels.
+    85→
+    86→-   Créer un environnement visuellement professionnel, sobre, lisible et
+    87→    accessible, inspiré d'outils de cabinet sans copier leur identité
+    88→    graphique.
+    89→
+    90→-   Prévoir un fonctionnement local ou hors ligne pour les fonctions
+    91→    essentielles lorsque la technologie choisie le permet. Signaler
+    92→    clairement toute fonction nécessitant un serveur, une API ou une
+    93→    connexion internet.
+    94→
+    95→-   Ne pas simuler une intégration à un ERP, une transmission fiscale,
+    96→    un accès à une banque ou une IA distante si elle n'existe pas
+    97→    réellement.
+    98→
+    99→-   Ne pas générer seulement une page d'accueil. Le contenu métier, les
+   100→    données et les exercices doivent être suffisamment riches pour une
+   101→    utilisation prolongée.
+   102→
+   103→## 2. Architecture générale du site
+   104→
+   105→-   Tableau de bord principal : progression, niveau, mois en cours,
+   106→    tâches à réaliser, échéances, documents manquants, anomalies
+   107→    ouvertes, livrables à terminer et compétences à renforcer.
+   108→
+   109→-   Parcours d'apprentissage : modules ordonnés, prérequis, objectifs,
+   110→    leçons courtes, démonstrations, exercices et critères de validation.
+   111→
+   112→-   Espace client : dossier permanent, dossier annuel, informations
+   113→    juridiques et fiscales fictives, contacts, organisation et contexte
+   114→    de l'entreprise.
+   115→
+   116→-   Centre documentaire : pièces justificatives, factures, contrats,
+   117→    relevés, exports de journaux, documents de paie, inventaires,
+   118→    confirmations et feuilles de travail.
+   119→
+   120→-   Atelier pratique : formulaires de saisie, rapprochements, tableaux
+   121→    de révision, calculs, tests, commentaires et conclusions.
+   122→
+   123→-   Fenêtre flottante du chef de mission : briefing de la tâche
+   124→    actuelle, étapes, risques, documents attendus, erreurs classiques,
+   125→    livrable et questions de contrôle.
+   126→
+   127→-   Calendrier : vue annuelle et mensuelle, tâches liées aux travaux
+   128→    réellement exécutés, échéances paramétrables et période
+   129→    post-clôture.
+   130→
+   131→-   Dossier de livrables : modèles modifiables, versions, statut de
+   132→    revue, commentaires du reviewer et exports.
+   133→
+   134→-   Centre de connaissances : glossaire, fiches pratiques, références
+   135→    officielles, rappels de normes, exemples corrigés et méthodes.
+   136→
+   137→-   Évaluation : exercices, cas de synthèse, examens blancs, matrice de
+   138→    compétences, historique des erreurs et plan de remédiation.
+   139→
+   140→-   Paramètres et données : sauvegarde, restauration, export JSON/CSV,
+   141→    réinitialisation avec confirmation, gestion des scénarios et des
+   142→    préférences.
+   143→
+   144→## 3. Ordre obligatoire des deux parcours
+   145→
+   146→### Parcours A --- Comptabilité en cabinet
+   147→
+   148→Ce parcours doit être terminé avant de débloquer le parcours complet
+   149→d'audit. L'apprenant apprend d'abord à produire, enregistrer, contrôler
+   150→et réviser l'information comptable.
+   151→
+   152→-   Fondamentaux : bilan, compte de résultat, actif/passif,
+   153→    charges/produits, débit/crédit, partie double, plan comptable et
+   154→    logique des comptes.
+   155→
+   156→-   Documents et cycle comptable : lecture des factures, mentions
+   157→    importantes, dates, pièces justificatives, classement, traçabilité,
+   158→    contrôles de complétude et détection des doublons.
+   159→
+   160→-   Saisie : achats, ventes, avoirs, banque, caisse, notes de frais,
+   161→    immobilisations, emprunts, salaires, opérations diverses et
+   162→    règlements.
+   163→
+   164→-   Comptes auxiliaires : lettrage, suivi des échéances, balances âgées,
+   165→    analyse des soldes inhabituels, relances simulées et justification
+   166→    des écarts.
+   167→
+   168→-   Trésorerie : rapprochement bancaire, écritures manquantes, frais
+   169→    bancaires, chèques ou virements en circulation et analyse des
+   170→    écarts.
+   171→
+   172→-   TVA et fiscalité : mécanismes, calculs, contrôles des comptes,
+   173→    régimes et hypothèses du client, préparation pédagogique des
+   174→    déclarations et suivi des obligations pertinentes.
+   175→
+   176→-   Immobilisations : distinction charge/immobilisation, coût d'entrée,
+   177→    mise en service, plans d'amortissement, cessions et valeur nette
+   178→    comptable.
+   179→
+   180→-   Stocks : inventaire physique, quantités, valorisation, écarts,
+   181→    dépréciation, cut-off et marchandises en transit.
+   182→
+   183→-   Paie et organismes sociaux : lecture de documents synthétiques,
+   184→    écritures, rapprochement avec les comptes, dettes sociales et
+   185→    charges à rattacher.
+   186→
+   187→-   Révision par cycle : justification des soldes, contrôles
+   188→    analytiques, rapprochements, recherche des pièces manquantes et
+   189→    conclusions documentées.
+   190→
+   191→-   Inventaire et clôture : FNP, FAE, charges constatées d'avance,
+   192→    produits constatés d'avance, charges à payer, produits à recevoir,
+   193→    amortissements, dépréciations, provisions et autres régularisations
+   194→    pertinentes.
+   195→
+   196→-   États financiers : balance après inventaire, bilan, compte de
+   197→    résultat, contrôles de cohérence et préparation du dossier pour
+   198→    revue.
+   199→
+   200→-   Communication professionnelle : questions au client, demandes de
+   201→    pièces, compte rendu au chef de mission, documentation des travaux
+   202→    et gestion des points en suspens.
+   203→
+   204→### Parcours B --- Audit externe en cabinet
+   205→
+   206→Ce parcours doit reprendre le dossier comptable du même client, puis
+   207→présenter les travaux sous l'angle de l'auditeur. L'apprenant doit
+   208→comprendre la différence entre préparer les comptes et recueillir des
+   209→éléments probants pour apprécier leur régularité, leur sincérité et leur
+   210→image fidèle dans le cadre applicable.
+   211→
+   212→-   Fondamentaux de l'audit : objectifs, rôle de l'auditeur, assurance
+   213→    raisonnable, limites inhérentes, indépendance, éthique, scepticisme
+   214→    professionnel et responsabilités.
+   215→
+   216→-   Cadre français : Code de commerce, rôle du commissaire aux comptes,
+   217→    NEP applicables, documentation, secret professionnel et distinction
+   218→    entre audit légal, audit contractuel et autres missions.
+   219→
+   220→-   Acceptation et maintien : connaissance du client, conditions
+   221→    préalables, compétence, ressources, indépendance, conflits
+   222→    d'intérêts, lettre de mission et préconditions réglementaires à
+   223→    vérifier.
+   224→
+   225→-   Planification : compréhension de l'entité, secteur, modèle
+   226→    économique, processus, système d'information, contrôle interne et
+   227→    stratégie d'audit.
+   228→
+   229→-   Matérialité : seuil de signification, seuil de planification et
+   230→    seuil de remontée des anomalies, avec hypothèses justifiées et
+   231→    effets sur les travaux.
+   232→
+   233→-   Évaluation des risques : risques inhérents, risques liés au
+   234→    contrôle, risques d'anomalies significatives, fraude, erreurs,
+   235→    estimations comptables et risques significatifs.
+   236→
+   237→-   Assertions : existence, exhaustivité, évaluation, droits et
+   238→    obligations, séparation des exercices, réalité des opérations,
+   239→    présentation et informations à fournir.
+   240→
+   241→-   Contrôle interne : walkthrough, description des processus,
+   242→    identification des contrôles clés, conception et mise en œuvre,
+   243→    tests de fonctionnement et limites des conclusions.
+   244→
+   245→-   Réponses aux risques : procédures substantives, tests de détail,
+   246→    procédures analytiques, sélection des éléments, échantillonnage,
+   247→    confirmations externes et tests de cut-off.
+   248→
+   249→-   Cycles d'audit : ventes/clients, achats/fournisseurs, stocks,
+   250→    immobilisations, trésorerie, personnel, fiscalité, emprunts,
+   251→    capitaux propres, charges, produits et clôture.
+   252→
+   253→-   Fraude et anomalies : indicateurs, scénarios, anomalies isolées ou
+   254→    systémiques, communication, évaluation de l'incidence et
+   255→    documentation sans tirer de conclusion hâtive.
+   256→
+   257→-   Éléments probants : pertinence, fiabilité, suffisance, sources
+   258→    internes/externes, contradictions et procédures complémentaires.
+   259→
+   260→-   Revue des travaux : feuilles de travail, références croisées,
+   261→    conclusion par assertion et cycle, points en suspens, revue du
+   262→    senior et résolution des commentaires.
+   263→
+   264→-   Finalisation : événements postérieurs, continuité d'exploitation,
+   265→    déclarations écrites lorsque requises, synthèse des anomalies,
+   266→    évaluation de l'incidence sur les comptes et conclusions.
+   267→
+   268→-   Rapport : scénarios pédagogiques de conclusions possibles,
+   269→    modifications de l'opinion, paragraphes appropriés selon les
+   270→    circonstances et règles applicables, sans présenter une formulation
+   271→    comme universelle.
+   272→
+   273→-   Clôture du dossier : finalisation documentaire, archivage selon le
+   274→    cadre applicable, liste de contrôle et retour d'expérience.
+   275→
+   276→## 4. Entreprise fictive commune aux deux parcours
+   277→
+   278→Créer une société fictive française, par exemple NOVATECH DISTRIBUTION
+   279→SAS, spécialisée dans la vente de matériel informatique à des
+   280→professionnels. Elle servira de fil rouge dans les deux parcours.
+   281→
+   282→-   Chiffre d'affaires indicatif : environ 1,8 million d'euros ;
+   283→    effectif indicatif : 12 salariés. Ces données peuvent être ajustées
+   284→    pour créer un dossier cohérent.
+   285→
+   286→-   Prévoir un exercice annuel du 1er janvier au 31 décembre et un
+   287→    espace post-clôture pour les travaux finalisés l'année suivante.
+   288→
+   289→-   Inclure plusieurs centaines d'opérations synthétiques, des soldes
+   290→    d'ouverture, des journaux, un grand livre, une balance, des
+   291→    auxiliaires, des factures, des relevés bancaires, des contrats, des
+   292→    inventaires, des données de paie synthétiques et des documents de
+   293→    clôture.
+   294→
+   295→-   Inclure des anomalies conçues pour l'apprentissage : doublons,
+   296→    erreur de TVA, mauvaise imputation, paiement non rapproché, pièce
+   297→    manquante, cut-off incorrect, stock obsolète, amortissement oublié,
+   298→    solde ancien, écriture non justifiée et estimation à revoir.
+   299→
+   300→-   Maintenir une source de vérité unique pour les données. Une
+   301→    modification d'écriture doit se répercuter dans les journaux, le
+   302→    grand livre, la balance, les tableaux de révision et les états
+   303→    financiers.
+   304→
+   305→-   Les chiffres, dates, taux, pièces et écritures doivent être
+   306→    cohérents entre eux. Ne pas fabriquer une balance équilibrée en
+   307→    modifiant des totaux sans justification comptable.
+   308→
+   309→-   Prévoir un registre des anomalies et un historique de résolution.
+   310→    Dans le parcours audit, l'apprenant doit pouvoir examiner les mêmes
+   311→    données sans que les conclusions soient prédéterminées par
+   312→    l'application.
+   313→
+   314→## 5. Calendrier annuel et fenêtre flottante
+   315→
+   316→Le calendrier doit couvrir les douze mois et la période post-clôture. Le
+   317→mois choisi doit actualiser les tâches et le briefing. Le calendrier ne
+   318→doit pas supposer que toutes les entreprises ont le même régime fiscal
+   319→ou les mêmes dates limites.
+   320→
+   321→Pour chaque tâche, afficher : objectif, contexte, prérequis, pièces
+   322→nécessaires, méthode étape par étape, comptes concernés, points de
+   323→vigilance, erreurs fréquentes, règle ou référence pertinente, livrable
+   324→attendu, critères d'acceptation et prochaine action.
+   325→
+   326→La fenêtre du chef de mission doit rester disponible partout. Elle doit
+   327→expliquer sans révéler automatiquement la solution. Les boutons « Indice
+   328→», « Méthode », « Exemple corrigé » et « Valider mon travail » doivent
+   329→produire des effets distincts.
+   330→
+   331→Le calendrier comptable doit inclure tenue régulière, rapprochements,
+   332→contrôles périodiques, suivi fiscal selon le scénario, pré-clôture,
+   333→inventaire, clôture, préparation des comptes annuels et période
+   334→post-clôture. Le calendrier d'audit doit distinguer planification,
+   335→interim éventuel, inventaire, travaux de clôture, finalisation et
+   336→rapport selon les circonstances.
+   337→
+   338→## 6. Moteur de pratique et de simulation
+   339→
+   340→-   Chaque exercice présente une situation réaliste, des documents ou
+   341→    données, une consigne, une zone de réponse et un critère de
+   342→    réussite.
+   343→
+   344→-   Les réponses ne sont pas révélées avant une tentative, sauf demande
+   345→    explicite d'un exemple corrigé.
+   346→
+   347→-   Fournir un retour pédagogique : ce qui est correct, ce qui manque,
+   348→    pourquoi, les conséquences possibles et comment un collaborateur
+   349→    expérimenté documenterait le travail.
+   350→
+   351→-   Permettre des tentatives multiples, des indices progressifs et une
+   352→    révision ciblée des erreurs récurrentes.
+   353→
+   354→-   Prévoir plusieurs formats : QCM, saisie d'écriture, calcul,
+   355→    rapprochement de lignes, détection d'anomalies, classement de
+   356→    pièces, rédaction de conclusion et étude de cas intégrée.
+   357→
+   358→-   Les tâches doivent exiger une action de l'apprenant ; lire une leçon
+   359→    ou cliquer sur « terminé » ne suffit pas à valider une compétence
+   360→    pratique.
+   361→
+   362→-   Inclure un mode guidé, un mode mission sans correction immédiate et
+   363→    un mode examen chronométré facultatif.
+   364→
+   365→-   Créer au minimum 100 exercices de comptabilité et 100 exercices
+   366→    d'audit, avec des cas courts, intermédiaires et de synthèse. Si le
+   367→    contenu doit être produit en plusieurs lots, le suivi doit indiquer
+   368→    les exercices déjà disponibles et ceux restant à créer.
+   369→
+   370→-   Créer au minimum 50 anomalies cohérentes dans le dossier comptable
+   371→    et 50 situations d'audit où la bonne réponse dépend de l'analyse, du
+   372→    risque et des éléments probants.
+   373→
+   374→## 7. Livrables professionnels à créer
+   375→
+   376→### Livrables comptables
+   377→
+   378→-   Journal et grand livre ; balance générale et auxiliaire ; état de
+   379→    rapprochement bancaire.
+   380→
+   381→-   Fiche d'imputation, tableau de lettrage et suivi des pièces
+   382→    manquantes.
+   383→
+   384→-   Fiche de justification de compte, tableau de révision par cycle et
+   385→    synthèse des écarts.
+   386→
+   387→-   Registre des immobilisations, plan d'amortissement et tableau de
+   388→    stocks.
+   389→
+   390→-   Tableau de TVA, tableau des dettes et créances, état des
+   391→    charges/produits à rattacher.
+   392→
+   393→-   Écritures d'inventaire, balance après inventaire, bilan et compte de
+   394→    résultat.
+   395→
+   396→-   Check-list de clôture et note de synthèse destinée au chef de
+   397→    mission.
+   398→
+   399→### Livrables d'audit
+   400→
+   401→-   Fiche de connaissance du client et note de planification.
+   402→
+   403→-   Évaluation des risques et matrice
+   404→    risques/assertions/comptes/procédures.
+   405→
+   406→-   Calcul documenté des seuils de signification selon des hypothèses
+   407→    justifiées.
+   408→
+   409→-   Description de processus, walkthrough et fiche de contrôle interne.
+   410→
+   411→-   Programme de travail par cycle, feuille de test et tableau
+   412→    d'échantillonnage pédagogique.
+   413→
+   414→-   Feuille de test de détail, procédure analytique, confirmation
+   415→    externe simulée et contrôle de cut-off.
+   416→
+   417→-   Tableau des anomalies, écarts corrigés/non corrigés, points à
+   418→    remonter et conclusions par cycle.
+   419→
+   420→-   Check-list de finalisation, note de synthèse, revue des points en
+   421→    suspens et exemple de rapport adapté au scénario.
+   422→
+   423→Tous les modèles doivent être modifiables, sauvegardables et
+   424→exportables. Le site doit distinguer le modèle vierge, le travail de
+   425→l'apprenant et un exemple corrigé. Les conclusions et les références
+   426→croisées doivent être conservées.
+   427→
+   428→## 8. Calendrier pédagogique et progression par niveaux
+   429→
+   430→Organise le parcours en niveaux plutôt qu'en pourcentage artificiel :
+   431→débutant, bases acquises, pratique encadrée, réalisation autonome de
+   432→tâches courantes, révision documentée, traitement d'un dossier complet,
+   433→puis simulation de mission intégrée.
+   434→
+   435→-   Chaque module possède des prérequis, objectifs, exercices
+   436→    obligatoires, score, erreurs critiques et critères de validation.
+   437→
+   438→-   Un tableau de compétences indique : non commencé, en cours, pratique
+   439→    guidée réussie, réussi de façon autonome, à réviser.
+   440→
+   441→-   Les compétences critiques ne peuvent pas être validées par le seul
+   442→    score moyen : une erreur majeure doit déclencher une explication et
+   443→    un nouvel exercice.
+   444→
+   445→-   Le système doit pouvoir recommander une séance de remédiation à
+   446→    partir des erreurs récurrentes.
+   447→
+   448→-   Créer des examens de synthèse où les documents ne sont pas rangés
+   449→    dans l'ordre de la solution et où plusieurs anomalies peuvent
+   450→    coexister.
+   451→
+   452→-   En fin de parcours, générer un rapport de préparation au stage :
+   453→    tâches maîtrisées, tâches à revoir, exemples de livrables produits
+   454→    et limites de l'évaluation.
+   455→
+   456→## 9. Références, règles et fiabilité
+   457→
+   458→-   Privilégier les sources officielles et primaires : Autorité des
+   459→    normes comptables (ANC), BOFiP, impots.gouv.fr, Service-Public.fr,
+   460→    Légifrance, CNCC et textes officiels applicables.
+   461→
+   462→-   Associer les références aux règles pertinentes, avec intitulé,
+   463→    organisme, lien et date de vérification lorsque celle-ci a
+   464→    réellement été faite.
+   465→
+   466→-   Ne jamais inventer une norme, une NEP, une échéance, un article de
+   467→    loi ou une citation.
+   468→
+   469→-   Lorsque la règle dépend du régime, du secteur, de la taille, de la
+   470→    forme juridique ou de la date, afficher cette dépendance.
+   471→
+   472→-   Distinguer le PCG français des IFRS et expliquer quand une
+   473→    comparaison est utile.
+   474→
+   475→-   Ne pas présenter une hypothèse pédagogique comme une obligation
+   476→    légale.
+   477→
+   478→-   Si l'application fonctionne hors ligne et que les règles peuvent
+   479→    changer, afficher la date de référence du contenu et un
+   480→    avertissement indiquant qu'une vérification à jour est nécessaire.
+   481→
+   482→## 10. Exigences techniques, sécurité et persistance
+   483→
+   484→-   Choisir une architecture adaptée à un site riche en données ;
+   485→    privilégier une séparation claire des composants, de la logique
+   486→    métier, des données et des tests.
+   487→
+   488→-   Si un prototype mono-fichier est choisi, expliquer ses limites et
+   489→    prévoir une architecture maintenable. Ne pas sacrifier la fiabilité
+   490→    à l'exigence d'un seul fichier si le résultat devient trop fragile.
+   491→
+   492→-   Sauvegarder la progression et les travaux localement ; proposer
+   493→    export et import JSON pour éviter une perte de données.
+   494→
+   495→-   Prévoir des données de démonstration réinitialisables sans écraser
+   496→    les travaux de l'apprenant sans confirmation.
+   497→
+   498→-   Valider les entrées, prévenir les doublons involontaires et
+   499→    conserver un historique des changements importants.
+   500→
+   501→-   Ne pas intégrer de données personnelles réelles, de vraies
+   502→    coordonnées bancaires ou des documents confidentiels.
+   503→
+   504→-   Ne pas placer de secrets, clés API ou identifiants dans le code côté
+   505→    client.
+   506→
+   507→-   Fournir un message clair en cas de fonctionnalité indisponible ou de
+   508→    données corrompues.
+   509→
+   510→## 11. Design UX/UI attendu
+   511→
+   512→-   Interface claire, professionnelle, adaptée à de longues sessions de
+   513→    travail.
+   514→
+   515→-   Navigation latérale par parcours et modules ; barre de recherche
+   516→    globale ; fil d'Ariane ; indicateurs de statut lisibles.
+   517→
+   518→-   Tables filtrables, triables et consultables ; fiches de documents
+   519→    détaillées ; commentaires et références croisées.
+   520→
+   521→-   États visuels distincts pour brouillon, prêt pour revue, commentaire
+   522→    reçu, à corriger, validé et clôturé.
+   523→
+   524→-   Fenêtre du chef de mission déplaçable ou réductible si la
+   525→    technologie le permet, sans masquer les données.
+   526→
+   527→-   Accessibilité : contrastes, navigation clavier, libellés explicites,
+   528→    messages d'erreur compréhensibles et mise en page responsive.
+   529→
+   530→-   Éviter les animations inutiles, les graphiques décoratifs et les
+   531→    pages surchargées.
+   532→
+   533→## 12. Critères d'acceptation et tests obligatoires
+   534→
+   535→Avant livraison, effectue et documente des tests fonctionnels. Ne
+   536→déclare pas une fonctionnalité testée si elle ne l'a pas été.
+   537→
+   538→-   Le parcours comptable est accessible et les modules essentiels sont
+   539→    reliés.
+   540→
+   541→-   Le parcours audit s'appuie sur les mêmes données du client et
+   542→    respecte la séparation entre comptabilité et audit.
+   543→
+   544→-   Une écriture équilibrée est enregistrée ; une écriture déséquilibrée
+   545→    est bloquée ou signalée clairement.
+   546→
+   547→-   Une modification comptable actualise le grand livre, la balance et
+   548→    les états dépendants.
+   549→
+   550→-   Les rapprochements calculent correctement les écarts et conservent
+   551→    les éléments non rapprochés.
+   552→
+   553→-   Les exercices évaluent les réponses et affichent des explications
+   554→    pertinentes.
+   555→
+   556→-   Les tâches mensuelles sont reliées aux modules et aux livrables
+   557→    correspondants.
+   558→
+   559→-   La fenêtre flottante affiche le contexte de la tâche sélectionnée.
+   560→
+   561→-   Les anomalies sont suivies jusqu'à leur résolution et ne
+   562→    disparaissent pas sans justification.
+   563→
+   564→-   Les sauvegardes, exports et imports fonctionnent et font l'objet de
+   565→    tests.
+   566→
+   567→-   Les états financiers respectent les équations comptables attendues
+   568→    selon le scénario.
+   569→
+   570→-   Les filtres, recherches, formulaires et boutons principaux sont
+   571→    testés.
+   572→
+   573→-   Les erreurs techniques sont affichées sans effacer silencieusement
+   574→    les travaux.
+   575→
+   576→-   Les liens réglementaires sont réels et les règles incertaines sont
+   577→    signalées.
+   578→
+   579→## 13. Méthode de développement attendue
+   580→
+   581→1.  Étape 1 : définir l'architecture fonctionnelle, les modules, le
+   582→    modèle de données et les relations entre les objets.
+   583→
+   584→2.  Étape 2 : créer un jeu de données comptable cohérent et vérifier les
+   585→    calculs avant de construire tous les écrans.
+   586→
+   587→3.  Étape 3 : développer le parcours comptable et ses outils pratiques.
+   588→
+   589→4.  Étape 4 : développer la révision et la clôture, puis valider les
+   590→    états financiers.
+   591→
+   592→5.  Étape 5 : développer le parcours audit en réutilisant le dossier
+   593→    client, avec ses propres feuilles de travail et conclusions.
+   594→
+   595→6.  Étape 6 : développer le calendrier, la fenêtre du chef de mission,
+   596→    les évaluations et la progression.
+   597→
+   598→7.  Étape 7 : tester les scénarios complets, corriger les anomalies et
+   599→    vérifier les exports.
+   600→
+   601→8.  Étape 8 : livrer les fichiers, les instructions de lancement, les
+   602→    limites connues et une liste des tests réellement effectués.
+   603→
+   604→## 14. Format de livraison final
+   605→
+   606→Livre un site web fonctionnel et tous les fichiers nécessaires. Fournis
+   607→:
+   608→
+   609→-   Les fichiers du projet et leur arborescence.
+   610→
+   611→-   Les instructions exactes pour ouvrir ou lancer le site.
+   612→
+   613→-   Un scénario de démonstration déjà rempli.
+   614→
+   615→-   Un dossier client fictif complet et cohérent.
+   616→
+   617→-   Une liste des fonctionnalités opérationnelles et des limites
+   618→    éventuelles.
+   619→
+   620→-   Un rapport de tests indiquant les cas testés et les résultats
+   621→    réellement observés.
+   622→
+   623→-   Une courte procédure de sauvegarde et de restauration des travaux.
+   624→
+   625→-   Un plan de continuation si certaines fonctions avancées doivent être
+   626→    livrées dans un lot suivant.
+   627→
+   628→## 15. Instruction finale
+   629→
+   630→**Ne réponds pas uniquement par un plan, des recommandations ou une
+   631→maquette. Construis le produit.** Si le volume dépasse tes capacités de
+   632→réponse en une seule fois, utilise une génération structurée par lots
+   633→sans perdre le modèle de données, la cohérence des comptes ou la liste
+   634→des fonctionnalités. N'annonce jamais que le projet est complet tant que
+   635→les écrans essentiels, les données, les interactions et les tests ne le
+   636→sont pas. Commence par l'architecture et le jeu de données, puis
+   637→développe le site et vérifie le fonctionnement avant de livrer.
+   638→
+   639→# Annexe --- Priorité si le modèle doit répartir le travail
+   640→
+   641→Si tu dois arbitrer entre apparence et profondeur fonctionnelle, donne
+   642→la priorité dans cet ordre :
+   643→
+   644→9.  Cohérence des données comptables et du modèle métier.
+   645→
+   646→10. Parcours comptable réellement praticable.
+   647→
+   648→11. Révision, clôture et états financiers liés aux écritures.
+   649→
+   650→12. Parcours d'audit complet lié au même dossier.
+   651→
+   652→13. Exercices, corrections et évaluation des compétences.
+   653→
+   654→14. Fenêtre mensuelle du chef de mission et calendrier.
+   655→
+   656→15. Sauvegarde, export, accessibilité et tests.
+   657→
+   658→16. Finitions visuelles et animations.
+   659→
+   660→**Fin du prompt maître.**
+   661→

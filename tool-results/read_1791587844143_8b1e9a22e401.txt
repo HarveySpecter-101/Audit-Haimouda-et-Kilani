@@ -1,0 +1,702 @@
+   640→  addBankOp(m, iso(m, payDay), `VIREMENT SALAIRES ${m}/${YEAR}`, 0, net + (m === 6 ? 950 : 0))
+   641→  // URSSAF le 15/m+1 (hors décembre → janvier N+1)
+   642→  if (m < 12) {
+   643→    const nm = m + 1
+   644→    const uDate = iso(nm, 15)
+   645→    // ANO-027 : double prélèvement URSSAF en avril (règlement de mars prélevé 2x)
+   646→    const doubled = nm === 4
+   647→    addEntry('BQE', uDate, `VIR-U-${m}`, `Règlement URSSAF (paie ${m}/N)`, [
+   648→      { accountCode: '431000', label: 'URSSAF', debit: urssaf, credit: 0 },
+   649→      { accountCode: '512000', label: 'Prélèvement URSSAF', debit: 0, credit: urssaf },
+   650→    ])
+   651→    addBankOp(nm, uDate, `PRELEVEMENT URSSAF ${m}/${YEAR}`, 0, urssaf)
+   652→    if (doubled) {
+   653→      addBankOp(nm, iso(nm, 16), `PRELEVEMENT URSSAF ${m}/${YEAR} (BIS — erreur banque)`, 0, urssaf, { anomalyCode: 'ANO-027' })
+   654→      addAnomaly({
+   655→        code: 'ANO-027',
+   656→        title: 'Double prélèvement URSSAF en avril (erreur de la banque)',
+   657→        description: `Le prélèvement URSSAF de mars (${urssaf.toFixed(2)} €) a été débité deux fois par la banque (15 et 16 avril). La comptabilité n'a enregistré qu'un seul prélèvement : le second débit du relevé n'est pas rapproché. Une régularisation (trop payé à l'organisme) est à enregistrer.`,
+   658→        hint: 'Confrontez le relevé bancaire d\u2019avril avec les écritures de banque : un débit du relevé est sans écriture. À régulariser en comptabilité (dette à récupérer).',
+   659→        category: 'TRESORERIE',
+   660→        severity: 'HIGH',
+   661→        path: 'A',
+   662→        moduleCode: 'A9',
+   663→        relatedAccount: '512000',
+   664→        impactAmount: urssaf,
+   665→      })
+   666→    }
+   667→    // Retraite le 5/m+1
+   668→    addEntry('BQE', iso(nm, 5), `VIR-R-${m}`, `Règlement retraite & prévoyance (paie ${m}/N)`, [
+   669→      { accountCode: '437000', label: 'Retraite & prévoyance', debit: other, credit: 0 },
+   670→      { accountCode: '512000', label: 'Prélèvement retraite', debit: 0, credit: other },
+   671→    ])
+   672→    addBankOp(nm, iso(nm, 5), `PRELEVEMENT RETRAITE PREVOYANCE ${m}/${YEAR}`, 0, other)
+   673→  }
+   674→}
+   675→
+   676→// ANO-026 description
+   677→addAnomaly({
+   678→  code: 'ANO-026',
+   679→  title: 'Doublon de salaire : apprenti payé deux fois (juin)',
+   680→  description: 'Le salaire de juin de l\u2019apprenti H. Perrot (950,00 €) a été saisi deux fois dans le journal de paie (ligne « bis »). Le journal de paie du fournisseur (document) ne montre qu\u2019un seul salaire pour cet employé. Le net viré est cohérent avec le doublon, mais la charge est doublée à tort.',
+   681→  hint: 'Comparez le journal de paie (12 salariés) avec l\u2019écriture : une ligne « bis » anormale apparaît. Traitement : extourner le doublon.',
+   682→  category: 'DOUBLON',
+   683→  severity: 'HIGH',
+   684→  path: 'A',
+   685→  moduleCode: 'A9',
+   686→  relatedAccount: '641000',
+   687→  impactAmount: 950,
+   688→})
+   689→
+   690→// ---------- Frais bancaires ----------
+   691→for (let m = 1; m <= 12; m++) {
+   692→  const fee = round2(14.9 + rf(0, 6))
+   693→  const doubled = m === 10 // ANO-023
+   694→  const date = iso(m, lastDay(m))
+   695→  addEntry(
+   696→    'BQE',
+   697→    date,
+   698→    `FB-${m}`,
+   699→    `Frais et commissions bancaires (${m}/N)`,
+   700→    [
+   701→      { accountCode: '627200', label: 'Frais de tenue de compte', debit: doubled ? round2(fee * 2) : fee, credit: 0 },
+   702→      { accountCode: '512000', label: 'NORDBANK frais', debit: 0, credit: doubled ? round2(fee * 2) : fee },
+   703→    ],
+   704→    { anomalyCode: doubled ? 'ANO-023' : undefined },
+   705→  )
+   706→  addBankOp(m, date, `FRAIS BANCAIRES NORDBANK ${m}/${YEAR}`, doubled ? round2(fee * 2) : fee, 0, { anomalyCode: doubled ? 'ANO-023' : undefined })
+   707→  if (doubled) {
+   708→    addAnomaly({
+   709→      code: 'ANO-023',
+   710→      title: 'Frais bancaires d\u2019octobre saisis en double',
+   711→      description: `Les frais bancaires d'octobre (${fee.toFixed(2)} €) ont été comptabilisés deux fois (${round2(fee * 2).toFixed(2)} €) alors que le relevé ne présente qu'un seul débit. Le compte 627200 est surévalué.`,
+   712→      hint: 'Confrontez le relevé d\u2019octobre avec la saisie : un seul débit pour deux écritures. Extourne nécessaire.',
+   713→      category: 'DOUBLON',
+   714→      severity: 'LOW',
+   715→      path: 'A',
+   716→      moduleCode: 'A5',
+   717→      relatedAccount: '627200',
+   718→      impactAmount: fee,
+   719→    })
+   720→  }
+   721→}
+   722→
+   723→// ============================================================
+   724→// 3. VENTES (matériel + prestations) PAR MOIS
+   725→// ============================================================
+   726→
+   727→let invoiceSeq = 1
+   728→let creditNoteSeq = 1
+   729→
+   730→for (let m = 1; m <= 12; m++) {
+   731→  const nMat = m === 8 ? ri(14, 16) : ri(16, 20) // août plus creux
+   732→  const nSvc = ri(5, 7)
+   733→  // Matériel
+   734→  for (let i = 0; i < nMat; i++) {
+   735→    const client = pick(CLIENT_POOL)
+   736→    const day = ri(2, Math.max(3, lastDay(m) - 1))
+   737→    const ht = round2(4200 + rf(0, 17800))
+   738→    const ref = `FV-${YEAR}-${String(invoiceSeq).padStart(4, '0')}`
+   739→    invoiceSeq++
+   740→    const desc = pick([
+   741→      'Lot postes de travail & écrans',
+   742→      'Serveurs rack + baies de stockage',
+   743→      'Ordinateurs portables professionnels',
+   744→      'Matériel réseau (switchs, bornes)',
+   745→      'Postes reconditionnés garantie 1 an',
+   746→      'Imprimantes & multifonctions',
+   747→      'Écrans professionnels 27"',
+   748→      'Unités centrales montage sur mesure',
+   749→    ])
+   750→    const res = saleEntry(iso(m, day), ref, client, ht, desc)
+   751→    // ANO-002 : doublon facturation client C007 en juillet
+   752→    if (m === 7 && client.code === 'C007' && i === 3) {
+   753→      const dup = saleEntry(iso(7, Math.min(day + 1, lastDay(7))), `${ref}-BIS`, client, ht, `${desc} (double facturation — erreur)`)
+   754→      addAnomaly({
+   755→        code: 'ANO-002',
+   756→        title: 'Facture client doublonnée (C007 — Groupe Hélios, juillet)',
+   757→        description: `La facture ${ref} a été saisie une seconde fois sous la référence ${ref}-BIS pour le même montant (${res.ttc.toFixed(2)} € TTC). Le client a été débité deux fois pour une seule livraison : un avoir doit être émis ou la facture ${ref}-BIS extournée.`,
+   758→        hint: 'Recherchez les pièces comportant le suffixe « -BIS » : un numéro de pièce dupliqué est un signal classique de doublon de saisie.',
+   759→        category: 'DOUBLON',
+   760→        severity: 'HIGH',
+   761→        path: 'A',
+   762→        moduleCode: 'A2',
+   763→        relatedAccount: '411000',
+   764→        relatedEntryId: dup.entry.id,
+   765→        relatedDocRef: `${ref}-BIS`,
+   766→        impactAmount: res.ttc,
+   767→      })
+   768→    }
+   769→    // ANO-049 : TTC saisi en HT (C015, mai)
+   770→    if (m === 5 && client.code === 'C015' && i === 2) {
+   771→      // générer une facture dont la saisie est fausse : HT = TTC réel
+   772→      const ttcReel = round2(ht * 1.2)
+   773→      const tvaFausse = round2(ttcReel * VAT)
+   774→      const e = addEntry(
+   775→        'VTE',
+   776→        iso(5, day),
+   777→        `FV-${YEAR}-${String(invoiceSeq).padStart(4, '0')}`,
+   778→        `${client.name} — Scanners documentaires (TVA manquante)`,
+   779→        [
+   780→          { accountCode: '411000', accountAux: 'C015', label: `FV-${YEAR}-${String(invoiceSeq).padStart(4, '0')}`, debit: round2(ttcReel * 1.2), credit: 0 },
+   781→          { accountCode: '707000', label: 'Ventes (TTC saisi en HT)', debit: 0, credit: ttcReel },
+   782→          { accountCode: '445710', label: 'TVA 20%', debit: 0, credit: tvaFausse },
+   783→        ],
+   784→        { anomalyCode: 'ANO-049' },
+   785→      )
+   786→      addDoc({
+   787→        type: 'INVOICE_CLIENT',
+   788→        date: iso(5, day),
+   789→        title: `Facture de vente FV-${YEAR}-${String(invoiceSeq).padStart(4, '0')} — ${client.name}`,
+   790→        thirdParty: client.name,
+   791→        amount: round2(ttcReel * 1.2),
+   792→        journal: 'VTE',
+   793→        entryId: e.id,
+   794→        content: { numero: `FV-${YEAR}-${String(invoiceSeq).padStart(4, '0')}`, client: `${client.name} (${client.city})`, description: 'Scanners documentaires', ht, tva: round2(ht * VAT), tauxTVA: '20 %', ttc: round2(ht + ht * VAT), conditions: 'Paiement à 30 jours', aux: 'C015' },
+   795→        anomalyCode: 'ANO-049',
+   796→      })
+   797→      addAnomaly({
+   798→        code: 'ANO-049',
+   799→        title: 'TVA manquante : montant TTC saisi comme HT (C015, mai)',
+   800→        description: `La facture de mai pour la Pharmacie Centrale Quai 9 a été saisie avec le montant TTC (${round2(ht * 1.2).toFixed(2)} €) comme base HT, générant une TVA collectée supplémentaire de ${round2(ht * VAT).toFixed(2)} € et un compte client surévalué.`,
+   801→        hint: 'Comparez la facture d\u2019origine avec la saisie : le total TTC de la pièce doit égaliser le débit du compte client. Ici le débit dépasse le TTC de la pièce.',
+   802→        category: 'TVA',
+   803→        severity: 'HIGH',
+   804→        path: 'A',
+   805→        moduleCode: 'A3',
+   806→        relatedAccount: '445710',
+   807→        relatedEntryId: e.id,
+   808→        impactAmount: round2(ht * VAT),
+   809→      })
+   810→      invoiceSeq++
+   811→    }
+   812→    pending.push({ docRef: ref, third: client, kind: 'CLIENT', ttc: res.ttc, date: iso(m, day), dueDate: addDue(client.paymentDays, iso(m, day)), paid: false })
+   813→  }
+   814→  // Prestations de services
+   815→  for (let i = 0; i < nSvc; i++) {
+   816→    const client = pick(CLIENT_POOL)
+   817→    const day = ri(2, Math.max(3, lastDay(m) - 1))
+   818→    const ht = round2(1800 + rf(0, 5200))
+   819→    const ref = `FVS-${YEAR}-${String(invoiceSeq).padStart(4, '0')}`
+   820→    invoiceSeq++
+   821→    const desc = pick([
+   822→      'Contrat de maintenance trimestriel',
+   823→      'Prestation d\u2019installation sur site',
+   824→      'Audit d\u2019infrastructure réseau',
+   825→      'Mise en service parc informatique',
+   826→      'Formation utilisateurs (jour)',
+   827→      'Sauvegarde et restauration (paramétrage)',
+   828→    ])
+   829→    const res = saleEntry(iso(m, day), ref, client, ht, desc, { account: '706000' })
+   830→    pending.push({ docRef: ref, third: client, kind: 'CLIENT', ttc: res.ttc, date: iso(m, day), dueDate: addDue(client.paymentDays, iso(m, day)), paid: false })
+   831→  }
+   832→
+   833→  // Avoirs clients occasionnels (retours matériel)
+   834→  if (m === 3 || m === 7 || m === 10) {
+   835→    const client = pick(CLIENT_POOL)
+   836→    const day = ri(10, 20)
+   837→    const ht = round2(600 + rf(0, 2400))
+   838→    const tva = round2(ht * VAT)
+   839→    const ttc = round2(ht + tva)
+   840→    const ref = `AV-${YEAR}-${String(creditNoteSeq).padStart(3, '0')}`
+   841→    creditNoteSeq++
+   842→    const e = addEntry('VTE', iso(m, day), ref, `Avoir ${client.name} — retour matériel`, [
+   843→      { accountCode: '709700', label: 'RRR accordés (retour)', debit: ht, credit: 0 },
+   844→      { accountCode: '445710', label: 'TVA 20% (avoir)', debit: tva, credit: 0 },
+   845→      { accountCode: '411000', accountAux: client.code, label: ref, debit: 0, credit: ttc },
+   846→    ])
+   847→    addDoc({
+   848→      type: 'CREDIT_NOTE',
+   849→      date: iso(m, day),
+   850→      title: `Avoir client ${ref} — ${client.name}`,
+   851→      thirdParty: client.name,
+   852→      amount: ttc,
+   853→      journal: 'VTE',
+   854→      entryId: e.id,
+   855→      content: { numero: ref, client: client.name, motif: 'Retour de matériel non conforme', ht, tva, tauxTVA: '20 %', ttc, aux: client.code },
+   856→    })
+   857→    pending.push({ docRef: ref, third: client, kind: 'CLIENT', ttc: -ttc, date: iso(m, day), dueDate: addDue(client.paymentDays, iso(m, day)), paid: false })
+   858→  }
+   859→}
+   860→
+   861→// ANO-022 : avoir client C018 non lettré
+   862→addAnomaly({
+   863→  code: 'ANO-022',
+   864→  title: 'Avoir client non lettré / non imputé (C018)',
+   865→  description: 'Un avoir de 798,00 € TTC a été émis pour le client C018 (Stephen Motors) en compensation d\u2019une facture réglée. L\u2019avoir n\u2019a été ni imputé au règlement ni remboursé : le compte auxiliaire présente un solde créditeur anormal.',
+   866→  hint: 'Dans le lettrage du module A4, repérez l\u2019auxiliaire au solde créditeur : un client ne doit pas être créancier de la société.',
+   867→  category: 'LETTRAGE',
+   868→  severity: 'LOW',
+   869→  path: 'A',
+   870→  moduleCode: 'A4',
+   871→  relatedAccount: '411000',
+   872→  impactAmount: 798,
+   873→})
+   874→
+   875→// ============================================================
+   876→// 4. ACHATS DE MARCHANDISES PAR MOIS
+   877→// ============================================================
+   878→
+   879→let purchaseSeq = 1
+   880→
+   881→for (let m = 1; m <= 12; m++) {
+   882→  const n = ri(10, 13)
+   883→  for (let i = 0; i < n; i++) {
+   884→    const supplier = pick(SUPPLIER_POOL)
+   885→    const day = ri(2, Math.max(3, lastDay(m) - 2))
+   886→    const ht = round2(5200 + rf(0, 19800))
+   887→    const ref = `FA-${YEAR}-${String(purchaseSeq).padStart(4, '0')}`
+   888→    purchaseSeq++
+   889→    const desc = pick([
+   890→      'Achat lot ordinateurs portables',
+   891→      'Achat serveurs et composants',
+   892→      'Achat écrans et accessoires',
+   893→      'Achat matériel réseau',
+   894→      'Achat périphériques et consommables',
+   895→      'Achat postes reconditionnés',
+   896→    ])
+   897→    // ANO-001 : doublon fournisseur ASIACOMP en mars
+   898→    if (m === 3 && supplier.code === 'F001' && i === 2) {
+   899→      const res = purchaseEntry(iso(3, day), ref, supplier, '607000', ht, desc)
+   900→      pending.push({ docRef: ref, third: supplier, kind: 'SUPPLIER', ttc: res.ttc, date: iso(3, day), dueDate: addDue(supplier.paymentDays, iso(3, day)), paid: false })
+   901→      const dupRef = `${ref}-BIS`
+   902→      const dup = purchaseEntry(iso(3, Math.min(day + 2, lastDay(3))), dupRef, supplier, '607000', ht, `${desc} (saisie en double — erreur)`)
+   903→      addAnomaly({
+   904→        code: 'ANO-001',
+   905→        title: 'Doublon de facture fournisseur (ASIACOMP, mars)',
+   906→        description: `La facture ${ref} a été saisie une seconde fois sous la référence ${dupRef} (même montant ${res.ttc.toFixed(2)} € TTC). Le fournisseur ne présentera qu'une facture : la dette fournisseur et les achats sont doublés à tort.`,
+   907→        hint: 'Cherchez les pièces au suffixe « -BIS » dans le journal des achats de mars. Un chèque de contrôle : rapprochez le relevé fournisseur (compte 401001) du grand livre.',
+   908→        category: 'DOUBLON',
+   909→        severity: 'HIGH',
+   910→        path: 'A',
+   911→        moduleCode: 'A2',
+   912→        relatedAccount: '401000',
+   913→        relatedEntryId: dup.entry.id,
+   914→        relatedDocRef: dupRef,
+   915→        impactAmount: res.ttc,
+   916→      })
+   917→      pending.push({ docRef: dupRef, third: supplier, kind: 'SUPPLIER', ttc: res.ttc, date: iso(3, Math.min(day + 2, lastDay(3))), dueDate: addDue(supplier.paymentDays, iso(3, day + 2)), paid: false })
+   918→      continue
+   919→    }
+   920→    // ANO-004 : TVA omise sur facture Office Plus en mai
+   921→    if (m === 5 && supplier.code === 'F013' && i === 1) {
+   922→      const ttc = round2(ht * 1.2)
+   923→      const e = addEntry(
+   924→        'ACH',
+   925→        iso(5, day),
+   926→        ref,
+   927→        `${supplier.name} — ${desc} (TVA non déduite)`,
+   928→        [
+   929→          { accountCode: '607000', label: `${desc} (TTC en charge)`, debit: ttc, credit: 0 },
+   930→          { accountCode: '401000', accountAux: supplier.code, label: ref, debit: 0, credit: ttc },
+   931→        ],
+   932→        { anomalyCode: 'ANO-004' },
+   933→      )
+   934→      addDoc({
+   935→        type: 'INVOICE_SUPPLIER',
+   936→        date: iso(5, day),
+   937→        title: `Facture fournisseur ${ref} — ${supplier.name}`,
+   938→        thirdParty: supplier.name,
+   939→        amount: ttc,
+   940→        journal: 'ACH',
+   941→        entryId: e.id,
+   942→        content: { numero: ref, fournisseur: supplier.name, description: desc, ht, tva: round2(ht * VAT), tauxTVA: '20 %', ttc, aux: supplier.code },
+   943→        anomalyCode: 'ANO-004',
+   944→      })
+   945→      addAnomaly({
+   946→        code: 'ANO-004',
+   947→        title: 'TVA déductible omise (Office Plus, mai)',
+   948→        description: `La facture de mai d'Office Plus (${ht.toFixed(2)} € HT) a été saisie pour son montant TTC en charge, sans TVA déductible. La charge est surévaluée de ${round2(ht * VAT).toFixed(2)} € et un droit à déduction est perdu.`,
+   949→        hint: 'Comparez la facture (HT/TVA/TTC) avec la saisie : le montant débité en charge doit être le HT.',
+   950→        category: 'TVA',
+   951→        severity: 'MEDIUM',
+   952→        path: 'A',
+   953→        moduleCode: 'A6',
+   954→        relatedAccount: '445660',
+   955→        relatedEntryId: e.id,
+   956→        impactAmount: round2(ht * VAT),
+   957→      })
+   958→      pending.push({ docRef: ref, third: supplier, kind: 'SUPPLIER', ttc, date: iso(5, day), dueDate: addDue(supplier.paymentDays, iso(5, day)), paid: false })
+   959→      continue
+   960→    }
+   961→    // ANO-025 : conversion devise erronée ASIACOMP en septembre
+   962→    if (m === 9 && supplier.code === 'F001' && i === 1) {
+   963→      const htWrong = round2(ht * 1.08)
+   964→      const res = purchaseEntry(iso(9, day), ref, supplier, '607000', htWrong, `${desc} (conversion erronée)`)
+   965→      addDoc({
+   966→        type: 'INVOICE_SUPPLIER',
+   967→        date: iso(9, day),
+   968→        title: `Facture fournisseur ${ref} — ASIACOMP (USD)`,
+   969→        thirdParty: supplier.name,
+   970→        amount: round2(ht * 1.2),
+   971→        journal: 'ACH',
+   972→        entryId: res.entry.id,
+   973→        content: { numero: ref, fournisseur: supplier.name, devise: 'USD', montantDevise: round2(ht / 1.08), tauxChange: '1 USD = 0,926 EUR', ht, tva: round2(ht * VAT), tauxTVA: '20 %', ttc: round2(ht * 1.2), aux: supplier.code, note: 'Facture en USD convertie au taux du jour de réception' },
+   974→      })
+   975→      addAnomaly({
+   976→        code: 'ANO-025',
+   977→        title: 'Erreur de conversion devise (ASIACOMP, septembre)',
+   978→        description: `La facture en USD de septembre a été convertie avec un taux erroné (taux appliqué 0,999 au lieu de 0,926) : l'achat est surévalué de ${round2(ht * 0.08).toFixed(2)} € HT.`,
+   979→        hint: 'Vérifiez le taux de conversion indiqué sur la pièce et refaites le calcul montant devise × taux.',
+   980→        category: 'IMPUTATION',
+   981→        severity: 'MEDIUM',
+   982→        path: 'A',
+   983→        moduleCode: 'A3',
+   984→        relatedAccount: '607000',
+   985→        impactAmount: round2(ht * 0.08),
+   986→      })
+   987→      pending.push({ docRef: ref, third: supplier, kind: 'SUPPLIER', ttc: res.ttc, date: iso(9, day), dueDate: addDue(supplier.paymentDays, iso(9, day)), paid: false })
+   988→      continue
+   989→    }
+   990→    const res = purchaseEntry(iso(m, day), ref, supplier, '607000', ht, desc)
+   991→    pending.push({ docRef: ref, third: supplier, kind: 'SUPPLIER', ttc: res.ttc, date: iso(m, day), dueDate: addDue(supplier.paymentDays, iso(m, day)), paid: false })
+   992→  }
+   993→  // Sous-traitance / prestations externes
+   994→  {
+   995→    const supplier = pick([SUPPLIERS[10], SUPPLIERS[14]])
+   996→    const day = ri(5, 20)
+   997→    const ht = round2(3800 + rf(0, 3200))
+   998→    const ref = `FS-${YEAR}-${String(purchaseSeq).padStart(4, '0')}`
+   999→    purchaseSeq++
+  1000→    const res = purchaseEntry(iso(m, day), ref, supplier, '611000', ht, 'Sous-traitance installations clients')
+  1001→    pending.push({ docRef: ref, third: supplier, kind: 'SUPPLIER', ttc: res.ttc, date: iso(m, day), dueDate: addDue(supplier.paymentDays, iso(m, day)), paid: false })
+  1002→  }
+  1003→  // Divers charges variables
+  1004→  {
+  1005→    // fournitures, entretien, transport, déplacements
+  1006→    const items: { supplier: Third; account: string; desc: string; ht: number }[] = [
+  1007→      { supplier: SUPPLIERS[12], account: '602240', desc: 'Fournitures administratives', ht: round2(240 + rf(0, 280)) },
+  1008→      { supplier: SUPPLIERS[8], account: '624100', desc: 'Transports sur ventes', ht: round2(420 + rf(0, 480)) },
+  1009→      { supplier: pick([SUPPLIERS[10], SUPPLIERS[14]]), account: '615000', desc: 'Maintenance & entretien matériel', ht: round2(300 + rf(0, 700)) },
+  1010→      { supplier: SUPPLIERS[9], account: '626000', desc: 'Affranchissements et ports', ht: round2(120 + rf(0, 160)) },
+  1011→    ]
+  1012→    for (const it of items) {
+  1013→      const day = ri(3, Math.max(4, lastDay(m) - 3))
+  1014→      const ref = `FD-${YEAR}-${String(purchaseSeq).padStart(4, '0')}`
+  1015→      purchaseSeq++
+  1016→      const res = purchaseEntry(iso(m, day), ref, it.supplier, it.account, it.ht, it.desc)
+  1017→      pending.push({ docRef: ref, third: it.supplier, kind: 'SUPPLIER', ttc: res.ttc, date: iso(m, day), dueDate: addDue(it.supplier.paymentDays, iso(m, day)), paid: false })
+  1018→    }
+  1019→  }
+  1020→}
+  1021→
+  1022→// ANO-047 : transport d'achat saisi en 624100 au lieu de 608000 (mars)
+  1023→addAnomaly({
+  1024→  code: 'ANO-047',
+  1025→  title: 'Frais de transport sur achat imputés en charges externes (mars)',
+  1026→  description: 'Des frais de port facturés avec un achat de matériel en mars (520,00 € HT) ont été imputés au compte 624100 « Transports sur ventes » au lieu de 608000 « Frais accessoires d\u2019achat » : ils doivent greffer le coût d\u2019achat des stocks.',
+  1027→  hint: 'Un transport facturé sur un achat de marchandise est un frais accessoire d\u2019achat (608), pas une charge de distribution.',
+  1028→  category: 'IMPUTATION',
+  1029→  severity: 'LOW',
+  1030→  path: 'A',
+  1031→  moduleCode: 'A3',
+  1032→  relatedAccount: '608000',
+  1033→  impactAmount: 520,
+  1034→})
+  1035→
+  1036→// ============================================================
+  1037→// 5. ANOMALIES SPÉCIFIQUES (pièces, OD, cession, stocks…)
+  1038→// ============================================================
+  1039→
+  1040→// --- ANO-011 : facture MAINTPRO sans pièce justificative (juin)
+  1041→{
+  1042→  const ht = 2400
+  1043→  const tva = round2(ht * VAT)
+  1044→  const ttc = round2(ht + tva)
+  1045→  const e = addEntry(
+  1046→    'ACH',
+  1047→    iso(6, 18),
+  1048→    'FA-2024-0681',
+  1049→    'MAINTPRO SERVICES — contrat maintenance T2 (pièce manquante)',
+  1050→    [
+  1051→      { accountCode: '615000', label: 'Maintenance trimestrielle', debit: ht, credit: 0 },
+  1052→      { accountCode: '445660', label: 'TVA 20%', debit: tva, credit: 0 },
+  1053→      { accountCode: '401000', accountAux: 'F011', label: 'FA-2024-0681', debit: 0, credit: ttc },
+  1054→    ],
+  1055→    { anomalyCode: 'ANO-011' },
+  1056→  )
+  1057→  addDoc({
+  1058→    type: 'INVOICE_SUPPLIER',
+  1059→    date: iso(6, 18),
+  1060→    title: 'Facture MAINTPRO juin — PIÈCE MANQUANTE',
+  1061→    thirdParty: 'MAINTPRO SERVICES',
+  1062→    amount: ttc,
+  1063→    journal: 'ACH',
+  1064→    entryId: e.id,
+  1065→    status: 'MISSING',
+  1066→    content: { numero: 'FA-2024-0681', note: 'Pièce justificative absente du classement : demande de justificatif à effectuer auprès du fournisseur.' },
+  1067→    anomalyCode: 'ANO-011',
+  1068→  })
+  1069→  pending.push({ docRef: 'FA-2024-0681', third: SUPPLIERS[10], kind: 'SUPPLIER', ttc, date: iso(6, 18), dueDate: addDue(30, iso(6, 18)), paid: false })
+  1070→  addAnomaly({
+  1071→    code: 'ANO-011',
+  1072→    title: 'Pièce justificative manquante (MAINTPRO, juin)',
+  1073→    description: `L'écriture de juin (${ttc.toFixed(2)} € TTC) ne dispose d'aucune pièce justificative au classement. Sans pièce, l'écriture n'est pas justifiable : la traçabilité exigée par les obligations comptables fait défaut.`,
+  1074→    hint: 'Le suivi des pièces manquantes (module A2) doit lister les écritures sans document. Une demande de pièce au fournisseur est requise.',
+  1075→    category: 'PIECE',
+  1076→    severity: 'HIGH',
+  1077→    path: 'A',
+  1078→    moduleCode: 'A2',
+  1079→    relatedAccount: '615000',
+  1080→    relatedEntryId: e.id,
+  1081→    impactAmount: ttc,
+  1082→  })
+  1083→}
+  1084→
+  1085→// --- ANO-012 : OD non justifiée (juillet)
+  1086→{
+  1087→  const e = addEntry(
+  1088→    'OD',
+  1089→    iso(7, 31),
+  1090→    'OD-2024-073',
+  1091→    'Régularisation diverse (non justifiée)',
+  1092→    [
+  1093→      { accountCode: '471000', label: 'Compte d\u2019attente', debit: 3200, credit: 0 },
+  1094→      { accountCode: '611000', label: 'Ajustement sous-traitance', debit: 0, credit: 3200 },
+  1095→    ],
+  1096→    { anomalyCode: 'ANO-012' },
+  1097→  )
+  1098→  addAnomaly({
+  1099→    code: 'ANO-012',
+  1100→    title: 'OD sans justification documentée (juillet)',
+  1101→    description: 'Une écriture OD de 3 200,00 € passée par le compte d\u2019attente 471000 en juillet ne comporte ni pièce, ni note explicative, ni validation. Le compte d\u2019attente n\u2019est pas un compte de charge : l\u2019opération doit être justifiée et reclassée.',
+  1102→    hint: 'Toute écriture doit être adossée à une pièce ou une note signée. Les comptes d\u2019attente doivent être soldés rapidement.',
+  1103→    category: 'OD',
+  1104→    severity: 'MEDIUM',
+  1105→    path: 'A',
+  1106→    moduleCode: 'A10',
+  1107→    relatedAccount: '471000',
+  1108→    relatedEntryId: e.id,
+  1109→    impactAmount: 3200,
+  1110→  })
+  1111→}
+  1112→
+  1113→// --- ANO-019 : compte d'attente non soldé depuis mars
+  1114→addAnomaly({
+  1115→  code: 'ANO-019',
+  1116→  title: "Compte d'attente 471000 non soldé depuis mars",
+  1117→  description: 'Un solde de 1 850,00 € subsiste au compte d\u2019attente depuis mars sans mouvement depuis. Les comptes d\u2019attente doivent être soldés : le solde correspond probablement à une opération à reclasser.',
+  1118→  hint: 'Le plan comptable n\u2019autorise un compte d\u2019attente que de façon transitoire. Recherchez l\u2019origine du solde dans le grand livre 471000.',
+  1119→  category: 'OD',
+  1120→  severity: 'MEDIUM',
+  1121→  path: 'A',
+  1122→  moduleCode: 'A10',
+  1123→  relatedAccount: '471000',
+  1124→  impactAmount: 1850,
+  1125→})
+  1126→
+  1127→// --- ANO-021 : avoir fournisseur COMPOSANTS OUEST non enregistré (septembre)
+  1128→{
+  1129→  const ht = 1260
+  1130→  const tva = round2(ht * VAT)
+  1131→  const ttc = round2(ht + tva)
+  1132→  const docRef = `AVF-2024-018`
+  1133→  addDoc({
+  1134→    type: 'CREDIT_NOTE',
+  1135→    date: iso(9, 22),
+  1136→    title: `Avoir fournisseur ${docRef} — COMPOSANTS OUEST (non enregistré)`,
+  1137→    thirdParty: 'COMPOSANTS OUEST',
+  1138→    amount: ttc,
+  1139→    journal: 'ACH',
+  1140→    status: 'PENDING',
+  1141→    content: { numero: docRef, fournisseur: 'COMPOSANTS OUEST (F003)', motif: 'Retour de composants défectueux', ht, tva, tauxTVA: '20 %', ttc, note: 'Avoir reçu mais non comptabilisé' },
+  1142→    anomalyCode: 'ANO-021',
+  1143→  })
+  1144→  addAnomaly({
+  1145→    code: 'ANO-021',
+  1146→    title: 'Avoir fournisseur non enregistré (COMPOSANTS OUEST, septembre)',
+  1147→    description: `Un avoir de ${ttc.toFixed(2)} € TTC a été reçu de COMPOSANTS OUEST en septembre pour retour de composants défectueux. Le document est présent au centre documentaire mais aucune écriture d'avoir n'a été passée : la dette fournisseur est surévaluée.`,
+  1148→    hint: 'Le centre documentaire contient un avoir non traité. Une écriture doit diminuer la dette (401) et les achats (609700) avec la TVA.',
+  1149→    category: 'PIECE',
+  1150→    severity: 'HIGH',
+  1151→    path: 'A',
+  1152→    moduleCode: 'A3',
+  1153→    relatedAccount: '401000',
+  1154→    relatedDocRef: docRef,
+  1155→    impactAmount: ttc,
+  1156→  })
+  1157→}
+  1158→
+  1159→// --- ANO-031 : fournisseur F013 débiteur ancien
+  1160→addAnomaly({
+  1161→  code: 'ANO-031',
+  1162→  title: 'Fournisseur débiteur ancien (OFFICE PLUS)',
+  1163→  description: 'Le compte auxiliaire fournisseur F013 OFFICE PLUS présente un solde débiteur de 1 260,00 € depuis août (trop-payé non imputé sur factures suivantes). Un fournisseur débiteur doit être justifié : avance, trop-perçu ou erreur.',
+  1164→  hint: 'Une balance fournisseur ne doit pas présenter de soldes débiteurs prolongés : soit l\u2019avoir est manquant, soit le trop-payé est à récupérer.',
+  1165→  category: 'LETTRAGE',
+  1166→  severity: 'LOW',
+  1167→  path: 'A',
+  1168→  moduleCode: 'A4',
+  1169→  relatedAccount: '401000',
+  1170→  impactAmount: 1260,
+  1171→})
+  1172→
+  1173→// --- ANO-028 / ANO-029 : notes de frais
+  1174→{
+  1175→  const e = addEntry(
+  1176→    'CAI',
+  1177→    iso(7, 12),
+  1178→    'NF-2024-072',
+  1179→    'Note de frais M. Le Goff — déplacement client Rennes',
+  1180→    [
+  1181→      { accountCode: '625100', label: 'Frais de déplacement (sans justificatif)', debit: 640, credit: 0 },
+  1182→      { accountCode: '530000', label: 'Caisse', debit: 0, credit: 640 },
+  1183→    ],
+  1184→    { anomalyCode: 'ANO-028' },
+  1185→  )
+  1186→  addDoc({
+  1187→    type: 'OTHER',
+  1188→    date: iso(7, 12),
+  1189→    title: 'Note de frais juillet — M. Le Goff (justificatifs manquants)',
+  1190→    thirdParty: 'NOVATECH DISTRIBUTION SAS',
+  1191→    amount: 640,
+  1192→    journal: 'CAI',
+  1193→    entryId: e.id,
+  1194→    status: 'MISSING',
+  1195→    content: { note: 'Note de frais de 640,00 € sans pièces jointes (train, repas, péage). Justificatifs à fournir.' },
+  1196→    anomalyCode: 'ANO-028',
+  1197→  })
+  1198→  addAnomaly({
+  1199→    code: 'ANO-028',
+  1200→    title: 'Note de frais sans justificatif (juillet)',
+  1201→    description: 'Une note de frais de 640,00 € réglée par caisse en juillet ne comporte aucun justificatif. Les frais de déplacement exigent des pièces (billets, factures restaurants, péages).',
+  1202→    hint: 'Une note de frais n\u2019est comptabilisable qu\u2019avec ses justificatifs. Demandez les pièces au collaborateur.',
+  1203→    category: 'PIECE',
+  1204→    severity: 'MEDIUM',
+  1205→    path: 'A',
+  1206→    moduleCode: 'A2',
+  1207→    relatedAccount: '625100',
+  1208→    relatedEntryId: e.id,
+  1209→    impactAmount: 640,
+  1210→  })
+  1211→}
+  1212→{
+  1213→  const e = addEntry(
+  1214→    'CAI',
+  1215→    iso(9, 20),
+  1216→    'NF-2024-091',
+  1217→    'Note de frais J. Morel — déplacement salon (dépense personnelle incluse)',
+  1218→    [
+  1219→      { accountCode: '625100', label: 'Frais de déplacement salon', debit: 417.99, credit: 0 },
+  1220→      { accountCode: '530000', label: 'Caisse', debit: 0, credit: 417.99 },
+  1221→    ],
+  1222→    { anomalyCode: 'ANO-029' },
+  1223→  )
+  1224→  addDoc({
+  1225→    type: 'OTHER',
+  1226→    date: iso(9, 20),
+  1227→    title: 'Note de frais septembre — J. Morel',
+  1228→    thirdParty: 'NOVATECH DISTRIBUTION SAS',
+  1229→    amount: 417.99,
+  1230→    journal: 'CAI',
+  1231→    entryId: e.id,
+  1232→    content: {
+  1233→      detail: [
+  1234→        { libelle: 'Train Brest-Paris AR', ht: 220.0 },
+  1235→        { libelle: 'Repas clients', ht: 180.0 },
+  1236→        { libelle: 'Abonnement streaming personnel', ht: 17.99, note: 'Dépense personnelle injustifiable' },
+  1237→      ],
+  1238→    },
+  1239→    anomalyCode: 'ANO-029',
+  1240→  })
+  1241→  addAnomaly({
+  1242→    code: 'ANO-029',
+  1243→    title: 'Dépense personnelle incluse dans une note de frais (septembre)',
+  1244→    description: "La note de frais de septembre contient un abonnement personnel de 17,99 € non lié à l'activité : comptabilisé en charges à tort, cette dépense n'est pas déductible et doit être refacturée au salarié.",
+  1245→    hint: 'Analysez le détail de la note de frais : la nature privée d\u2019une dépense doit être exclue des charges professionnelles.',
+  1246→    category: 'PIECE',
+  1247→    severity: 'MEDIUM',
+  1248→    path: 'A',
+  1249→    moduleCode: 'A2',
+  1250→    relatedAccount: '625100',
+  1251→    relatedEntryId: e.id,
+  1252→    impactAmount: 17.99,
+  1253→  })
+  1254→}
+  1255→
+  1256→// --- ANO-046 : avance salarié non remboursée (octobre)
+  1257→{
+  1258→  const e = addEntry(
+  1259→    'CAI',
+  1260→    iso(10, 5),
+  1261→    'AVS-2024-10',
+  1262→    'Avance sur salaire L. Morvan',
+  1263→    [
+  1264→      { accountCode: '425000', accountAux: 'SAL008', label: 'Avance sur salaire', debit: 400, credit: 0 },
+  1265→      { accountCode: '530000', label: 'Caisse', debit: 0, credit: 400 },
+  1266→    ],
+  1267→    { anomalyCode: 'ANO-046' },
+  1268→  )
+  1269→  addAnomaly({
+  1270→    code: 'ANO-046',
+  1271→    title: 'Avance sur salaire non remboursée (L. Morvan)',
+  1272→    description: "Une avance de 400,00 € versée en octobre n'a pas été retenue sur les paies suivantes : le compte 425000 reste débiteur en fin d'exercice. Une retenue sur le salaire de décembre ou un remboursement est attendu.",
+  1273→    hint: 'Le compte 425000 doit se solder par retenues sur paie successives. Vérifiez les bulletins suivants.',
+  1274→    category: 'PAIE',
+  1275→    severity: 'LOW',
+  1276→    path: 'A',
+  1277→    moduleCode: 'A9',
+  1278→    relatedAccount: '425000',
+  1279→    relatedEntryId: e.id,
+  1280→    impactAmount: 400,
+  1281→  })
+  1282→}
+  1283→
+  1284→// --- ANO-038 : cession tablette non comptabilisée (septembre)
+  1285→{
+  1286→  addDoc({
+  1287→    type: 'OTHER',
+  1288→    date: iso(9, 15),
+  1289→    title: 'Cession tablette de démonstration — Stephen Motors (900 €)',
+  1290→    thirdParty: 'STEPHEN MOTORS',
+  1291→    amount: 900,
+  1292→    content: {
+  1293→      note: 'Vente de la tablette de démonstration (IMMO-09) acquise 3 000 € le 01/02/2022, amortie sur 4 ans. Chèque de 900,00 € encaissé le 18/09. Aucune écriture de cession passée.',
+  1294→      asset: 'IMMO-09', prix: 900,
+  1295→    },
+  1296→    anomalyCode: 'ANO-038',
+  1297→  })
+  1298→  addBankOp(9, iso(9, 18), `CHEQUE 5120031 ENCAISSE STEPHEN MOTORS TABLETTE`, 0, 900)
+  1299→  addEntry('BQE', iso(9, 18), 'CE-2024-091', 'Encaissement cession tablette démonstration', [
+  1300→    { accountCode: '467000', label: 'Produit cession à reclasser (non traité)', debit: 900, credit: 0 },
+  1301→    { accountCode: '512000', label: 'Chèque encaissé', debit: 0, credit: 900 },
+  1302→  ])
+  1303→  addAnomaly({
+  1304→    code: 'ANO-038',
+  1305→    title: 'Cession d\u2019immobilisation non comptabilisée (tablette, septembre)',
+  1306→    description: "La tablette IMMO-09 (VNC estimée 1 500 € au jour de la cession) a été vendue 900,00 € en septembre. L'encaissement a été enregistré en compte courant mais aucune écriture de cession (675600 VNC / 281830 reprise des amortissements / 775600 prix) n'a été passée : l'actif est toujours présent au bilan.",
+  1307→    hint: 'Une cession d\u2019immobilisation exige : sortie de l\u2019actif (solde du compte brut), reprise des amortissements, prix de cession en produit exceptionnel, VNC en charge exceptionnelle.',
+  1308→    category: 'AMORTISSEMENT',
+  1309→    severity: 'HIGH',
+  1310→    path: 'A',
+  1311→    moduleCode: 'A7',
+  1312→    relatedAccount: '218300',
+  1313→    impactAmount: 900,
+  1314→  })
+  1315→}
+  1316→
+  1317→// --- ANO-050 : virement client non identifié (octobre)
+  1318→{
+  1319→  addBankOp(10, iso(10, 22), 'VIREMENT RECU NON IDENTIFIE REF 4412-OP', 0, 2380, { anomalyCode: 'ANO-050' })
+  1320→  addAnomaly({
+  1321→    code: 'ANO-050',
+  1322→    title: 'Virement reçu non identifié (octobre)',
+  1323→    description: 'Un virement de 2 380,00 € a été reçu en octobre sans référence exploitable. Aucune écriture n\u2019a été passée : le relevé présente un crédit non comptabilisé (constaté par le rapprochement). Une demande d\u2019information à la banque/aux clients est nécessaire avant imputation.',
+  1324→    hint: 'Le rapprochement bancaire d\u2019octobre révèle une ligne de relevé sans écriture : à identifier avant saisie (compte d\u2019attente possible dans l\u2019attente).',
+  1325→    category: 'TRESORERIE',
+  1326→    severity: 'MEDIUM',
+  1327→    path: 'A',
+  1328→    moduleCode: 'A5',
+  1329→    relatedAccount: '512000',
+  1330→    impactAmount: 2380,
+  1331→  })
+  1332→}
+  1333→
+  1334→// --- ANO-041 : TVS non comptabilisée
+  1335→addAnomaly({
+  1336→  code: 'ANO-041',
+  1337→  title: 'Taxe sur les véhicules de société non comptabilisée',
+  1338→  description: "La TVS due au titre de l'exercice est estimée à 4 300,00 € (véhicule utilitaire + 2 véhicules mixtes du gérant). Aucune provision ni écriture n'existe au 31/12. Charge fiscale de l'exercice à rattacher.",
+  1339→  hint: 'Les impôts rattachables à l\u2019exercice doivent être comptabilisés au plus tard à la clôture (charge à payer 448600).',
+
+[showing lines 640-1339 of 2260; use offset=1340 with limit to continue reading]

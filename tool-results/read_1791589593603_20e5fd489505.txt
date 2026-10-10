@@ -1,0 +1,646 @@
+     1→import type { LearningModule } from '@/lib/types'
+     2→
+     3→// ============================================================
+     4→// MODULES DU PARCOURS A — COMPTABILITÉ EN CABINET (13 modules)
+     5→// Leçons enrichies (lot 2-a) : chaque module référence
+     6→// désormais ses exercices réels (exerciseKeys) et propose
+     7→// une leçon structurée (textes, tables, astuces, exemples).
+     8→// Ordre obligatoire A1 → A13.
+     9→// ============================================================
+    10→
+    11→const M = (m: Omit<LearningModule, 'path'>): LearningModule => ({ ...m, path: 'A' })
+    12→
+    13→export const MODULES_A_FULL: LearningModule[] = [
+    14→  M({
+    15→    code: 'A1',
+    16→    order: 1,
+    17→    title: 'Fondamentaux de la comptabilité',
+    18→    summary: 'Bilan, compte de résultat, actif/passif, charges/produits, débit/crédit, partie double, plan comptable.',
+    19→    objectives: [
+    20→      'Lire un bilan et un compte de résultat',
+    21→      'Maîtriser la logique débit/crédit et la partie double',
+    22→      'Naviguer dans le plan comptable général (PCG)',
+    23→    ],
+    24→    prerequisites: [],
+    25→    competencies: ['CP01', 'CP02', 'CP03'],
+    26→    lessons: [
+    27→      {
+    28→        id: 'A1-L1',
+    29→        title: 'Le bilan et le compte de résultat',
+    30→        blocks: [
+    31→          {
+    32→            kind: 'text',
+    33→            text: "Le bilan présente le patrimoine à une date donnée : à l'actif ce que l'entreprise possède, au passif ce qu'elle doit et ses capitaux propres. Le compte de résultat filme l'exercice : produits moins charges égale résultat.",
+    34→          },
+    35→          {
+    36→            kind: 'table',
+    37→            title: 'Équations fondamentales',
+    38→            table: {
+    39→              headers: ['Équation', 'Lecture'],
+    40→              rows: [
+    41→                ['Actif = Passif', 'Le bilan est toujours équilibré'],
+    42→                ['Résultat = Produits − Charges', "Le résultat de l'exercice"],
+    43→                ['Actif net = Capitaux propres + Dettes', 'Lecture financière du passif'],
+    44→              ],
+    45→            },
+    46→          },
+    47→          {
+    48→            kind: 'tip',
+    49→            title: 'Photographie vs film',
+    50→            text: 'Retenez l’image : le bilan est une PHOTOGRAPHIE au 31/12, le compte de résultat est le FILM de l’année. Le résultat du film vient équilibrer la photographie.',
+    51→          },
+    52→        ],
+    53→      },
+    54→      {
+    55→        id: 'A1-L2',
+    56→        title: 'Débit, crédit et plan comptable',
+    57→        blocks: [
+    58→          {
+    59→            kind: 'list',
+    60→            title: 'Sens naturel des comptes',
+    61→            items: [
+    62→              'Actif et charges : augmentent au DÉBIT',
+    63→              'Passif et produits : augmentent au CRÉDIT',
+    64→              'La partie double impose Σ débits = Σ crédits à chaque écriture',
+    65→            ],
+    66→          },
+    67→          {
+    68→            kind: 'table',
+    69→            title: 'Les 7 classes utiles en cabinet',
+    70→            table: {
+    71→              headers: ['Classe', 'Nature', 'Exemples du dossier'],
+    72→              rows: [
+    73→                ['1', 'Capitaux, réserves, emprunts', '101000 Capital, 164000 Emprunt NORDBANK'],
+    74→                ['2', 'Immobilisations', '218300 Matériel informatique, 281830 amortissements'],
+    75→                ['3', 'Stocks', '355100 Marchandises, 395500 dépréciations'],
+    76→                ['4', 'Tiers', '411000 Clients, 401000 Fournisseurs, 445710 TVA collectée'],
+    77→                ['5', 'Financier', '512000 Banque, 530000 Caisse'],
+    78→                ['6', 'Charges', '607000 Achats, 641000 Salaires'],
+    79→                ['7', 'Produits', '707000 Ventes, 706000 Prestations'],
+    80→              ],
+    81→            },
+    82→          },
+    83→          {
+    84→            kind: 'example',
+    85→            title: 'Exemple corrigé : la facture d’achat',
+    86→            text: 'Facture 12 000,00 € HT, TVA 20 % : D607000 12 000,00 / D445660 2 400,00 / C401000 14 400,00 — trois lignes, une seule obligation : l’égalité stricte des débits et des crédits.',
+    87→          },
+    88→        ],
+    89→      },
+    90→    ],
+    91→    workshopView: 'balance',
+    92→    exerciseKeys: ['A1-Q01', 'A1-Q02', 'A1-Q03', 'A1-Q04', 'A1-Q05', 'A1-Q06', 'A1-M01', 'A1-M02', 'A1-O01'],
+    93→    validationCriteria: ['QCM fondamentaux réussi (≥ 80 %)', 'Savoir énoncer les deux équations comptables'],
+    94→  }),
+    95→  M({
+    96→    code: 'A2',
+    97→    order: 2,
+    98→    title: 'Documents et cycle comptable',
+    99→    summary: 'Lecture des factures, mentions obligatoires, pièces justificatives, classement, traçabilité, complétude, doublons.',
+   100→    objectives: [
+   101→      'Contrôler une facture (mentions, TVA, doublons)',
+   102→      'Classer et tracer les pièces du dossier',
+   103→      'Détecter les pièces manquantes et les doublons',
+   104→    ],
+   105→    prerequisites: ['A1'],
+   106→    competencies: ['CP04', 'TR01'],
+   107→    lessons: [
+   108→      {
+   109→        id: 'A2-L1',
+   110→        title: 'Anatomie d\u2019une facture conforme',
+   111→        blocks: [
+   112→          {
+   113→            kind: 'text',
+   114→            text: "Une facture conforme comporte : numéro unique, date, identité complète des parties, description, quantités, prix HT, taux et montant de TVA, total TTC, conditions de paiement. Toute anomalie de mention doit être traitée avant saisie.",
+   115→          },
+   116→          { kind: 'tip', title: 'Réflexe doublon', text: "Rechercher le numéro de pièce dans le journal avant saisie : un numéro déjà traité (ou un suffixe -BIS) signale un doublon probable." },
+   117→          {
+   118→            kind: 'table',
+   119→            title: 'Contrôles avant saisie',
+   120→            table: {
+   121→              headers: ['Contrôle', 'Méthode', 'Signal d’alerte'],
+   122→              rows: [
+   123→                ['Unicité', 'Recherche du numéro de pièce', 'Suffixe -BIS, même montant même jour'],
+   124→                ['Cohérence TVA', 'TTC = HT × (1 + taux)', 'Écart de calcul, TTC pris en HT'],
+   125→                ['Complétude', 'Rapprochement pièces / journal', 'Écriture sans pièce, pièce PENDING'],
+   126→              ],
+   127→            },
+   128→          },
+   129→        ],
+   130→      },
+   131→    ],
+   132→    workshopView: 'journaux',
+   133→    exerciseKeys: ['A2-Q01', 'A2-Q02', 'A2-Q03', 'A2-D01', 'A2-D02', 'A2-M01', 'A2-S01'],
+   134→    validationCriteria: ['Détection des doublons du dossier réussie', 'Liste des pièces manquantes établie'],
+   135→  }),
+   136→  M({
+   137→    code: 'A3',
+   138→    order: 3,
+   139→    title: 'Saisie des opérations courantes',
+   140→    summary: 'Achats, ventes, avoirs, banque, caisse, notes de frais : imputation et enregistrement conformes au PCG.',
+   141→    objectives: [
+   142→      'Saisir une facture d\u2019achat et de vente avec TVA',
+   143→      'Comptabiliser les avoirs et retours',
+   144→      'Choisir le journal adapté à chaque opération',
+   145→    ],
+   146→    prerequisites: ['A2'],
+   147→    competencies: ['CP05', 'CP06'],
+   148→    lessons: [
+   149→      {
+   150→        id: 'A3-L1',
+   151→        title: 'Saisir une facture d\u2019achat',
+   152→        blocks: [
+   153→          {
+   154→            kind: 'text',
+   155→            text: "Journal ACH : charge au débit (classe 6 au HT), TVA déductible au débit (445660), fournisseur au crédit (401) au TTC. L'équilibre est automatique si HT et TVA sont exacts.",
+   156→          },
+   157→          {
+   158→            kind: 'warn',
+   159→            title: 'Erreur classique : le TTC saisi en HT',
+   160→            text: 'Dans le dossier (ANO-049, mai), le TTC a été saisi comme base HT : produit, TVA et créance sont surévalués. Contrôlez TOUJOURS : TTC = HT × (1 + taux).',
+   161→          },
+   162→        ],
+   163→      },
+   164→      {
+   165→        id: 'A3-L2',
+   166→        title: 'Ventes, avoirs et sens des comptes',
+   167→        blocks: [
+   168→          {
+   169→            kind: 'text',
+   170→            text: "Journal VTE : client au débit (TTC), produit au crédit (HT), TVA collectée au crédit. L'avoir client s'inverse : RRR au débit (709700), TVA au débit, client au crédit.",
+   171→          },
+   172→          {
+   173→            kind: 'example',
+   174→            title: 'Exemple corrigé : l’avoir client',
+   175→            text: 'Retour de matériel de 1 000,00 € HT (TVA 20 %) : D709700 1 000,00 / D445710 200,00 / C411000 1 200,00 (journal VTE).',
+   176→          },
+   177→          {
+   178→            kind: 'tip',
+   179→            title: 'Quel journal ?',
+   180→            text: 'La nature du fait générateur décide : facture fournisseur → ACH ; facture client → VTE ; mouvement banque → BQE ; espèces → CAI ; régularisation → OD ; salaires → PAIE.',
+   181→          },
+   182→        ],
+   183→      },
+   184→    ],
+   185→    workshopView: 'saisie',
+   186→    exerciseKeys: [
+   187→      'A3-E01', 'A3-E02', 'A3-E03', 'A3-E04', 'A3-E05', 'A3-E06', 'A3-E07', 'A3-E08', 'A3-E09',
+   188→      'A3-Q01', 'A3-Q02', 'A3-Q03', 'A3-D01', 'A3-M01', 'A3-O01',
+   189→    ],
+   190→    validationCriteria: ['Écritures d\u2019exercice correctes (journal, comptes, montants)', 'Aucune écriture déséquilibrée enregistrée'],
+   191→  }),
+   192→  M({
+   193→    code: 'A4',
+   194→    order: 4,
+   195→    title: 'Comptes auxiliaires et lettrage',
+   196→    summary: 'Lettrage, échéances, balances âgées, soldes inhabituels, relances simulées, justification des écarts.',
+   197→    objectives: [
+   198→      'Lettrer factures et règlements',
+   199→      'Établir et lire une balance âgée',
+   200→      'Identifier les soldes anormaux (anciens, créditeurs)',
+   201→    ],
+   202→    prerequisites: ['A3'],
+   203→    competencies: ['CP07'],
+   204→    lessons: [
+   205→      {
+   206→        id: 'A4-L1',
+   207→        title: 'Le lettrage : justifier le solde',
+   208→        blocks: [
+   209→          {
+   210→            kind: 'text',
+   211→            text: "Lettrer consiste à apparier chaque facture (débit) avec son règlement (crédit) chez le même auxiliaire. Les reliquats s'analysent : escompte, avoir, erreur, impayé.",
+   212→          },
+   213→          {
+   214→            kind: 'table',
+   215→            title: 'Soldes à surveiller dans le dossier',
+   216→            table: {
+   217→              headers: ['Auxiliaire', 'Situation', 'Traitement'],
+   218→              rows: [
+   219→                ['C005 ETS MOREAU', 'Débiteur 12 400,00 € depuis N-2', 'Relance, justification, douteux le cas échéant'],
+   220→                ['C012 MEGA RETAIL', 'Créditeur 5 640,00 € (double virement)', 'Extourne de la saisie en double'],
+   221→                ['F013 OFFICE PLUS', 'Débiteur 1 260,00 € (trop-payé)', 'Imputation sur factures suivantes ou restitution'],
+   222→                ['C019 LE GOFF', 'Acompte 5 700,00 € au crédit du client', 'Reclassement en 419100 (avances reçues)'],
+   223→              ],
+   224→            },
+   225→          },
+   226→          {
+   227→            kind: 'tip',
+   228→            title: 'Un lettrage, un seul auxiliaire',
+   229→            text: 'Ne lettrez JAMAIS des lignes de deux auxiliaires différents (cf. ANO-043 : règlement C004 lettré sur facture C006).',
+   230→          },
+   231→        ],
+   232→      },
+   233→    ],
+   234→    workshopView: 'auxiliaires',
+   235→    exerciseKeys: ['A4-E01', 'A4-Q01', 'A4-Q02', 'A4-Q03', 'A4-D01', 'A4-D02', 'A4-S01'],
+   236→    validationCriteria: ['Auxiliaires principaux lettrés sans erreur', 'Reliquats justifiés'],
+   237→  }),
+   238→  M({
+   239→    code: 'A5',
+   240→    order: 5,
+   241→    title: 'Trésorerie et rapprochement bancaire',
+   242→    summary: 'Rapprochement bancaire, écritures manquantes, frais bancaires, chèques et virements en circulation.',
+   243→    objectives: [
+   244→      'Établir un rapprochement bancaire fiable',
+   245→      'Analyser et justifier chaque écart',
+   246→      'Saisir les écritures de régularisation détectées',
+   247→    ],
+   248→    prerequisites: ['A3'],
+   249→    competencies: ['CP08'],
+   250→    lessons: [
+   251→      {
+   252→        id: 'A5-L1',
+   253→        title: 'Le rapprochement bancaire',
+   254→        blocks: [
+   255→          {
+   256→            kind: 'text',
+   257→            text: "On confronte le compte 512 (comptabilité) au relevé bancaire. Les écarts normaux sont les éléments en circulation (chèques émis non débités, remises non créditées) ; les écarts anormaux sont des erreurs à corriger ou des lignes du relevé à saisir.",
+   258→          },
+   259→          {
+   260→            kind: 'table',
+   261→            title: 'Écarts réels du dossier',
+   262→            table: {
+   263→              headers: ['Mois', 'Écart', 'Statut'],
+   264→              rows: [
+   265→                ['Avril', 'Double prélèvement URSSAF 17 400,00 € (relevé sans écriture)', 'À régulariser'],
+   266→                ['Septembre', 'Virement C012 saisi deux fois 5 640,00 €', 'Extourne'],
+   267→                ['Octobre', 'Virement reçu non identifié 2 380,00 €', 'À identifier/saisir'],
+   268→                ['Novembre', 'Prélèvement EDF représenté 833,90 € non saisi', 'À saisir'],
+   269→                ['Décembre', 'Chèques et virement interne en circulation', 'Normal : à documenter'],
+   270→              ],
+   271→            },
+   272→          },
+   273→          {
+   274→            kind: 'warn',
+   275→            title: 'Sens de lecture du relevé',
+   276→            text: 'Le relevé est tenu du point de vue de la BANQUE : un crédit du relevé est une ENTRÉE d’argent (débit du 512000 chez nous).',
+   277→          },
+   278→        ],
+   279→      },
+   280→    ],
+   281→    workshopView: 'banque',
+   282→    exerciseKeys: ['A5-E01', 'A5-E02', 'A5-E03', 'A5-C01', 'A5-Q01', 'A5-Q02', 'A5-D01', 'A5-M01', 'A5-O01', 'A5-X01'],
+   283→    validationCriteria: ['Rapprochements mensuels sans écart résiduel injustifié', 'Écritures manquantes détectées et saisies'],
+   284→  }),
+   285→  M({
+   286→    code: 'A6',
+   287→    order: 6,
+   288→    title: 'TVA et fiscalité des affaires',
+   289→    summary: 'Mécanismes TVA, calculs, contrôles des comptes, régimes, préparation des déclarations.',
+   290→    objectives: [
+   291→      'Comprendre la mécanique de la TVA',
+   292→      'Contrôler les comptes de TVA',
+   293→      'Préparer la liquidation mensuelle',
+   294→    ],
+   295→    prerequisites: ['A3'],
+   296→    competencies: ['CP09'],
+   297→    lessons: [
+   298→      {
+   299→        id: 'A6-L1',
+   300→        title: 'La mécanique de la TVA',
+   301→        blocks: [
+   302→          {
+   303→            kind: 'text',
+   304→            text: "TVA collectée (445710) sur les ventes, TVA déductible (445660/445620) sur les achats. Chaque mois : liquidation puis déclaration (CA3 pour le régime mensuel sur les débits du client). Contrôle de cohérence : collectée ≈ 20 % des ventes HT de biens.",
+   305→          },
+   306→          {
+   307→            kind: 'table',
+   308→            title: 'Taux applicables dans le dossier',
+   309→            table: {
+   310→              headers: ['Opération', 'Taux', 'Compte'],
+   311→              rows: [
+   312→                ['Vente de matériel, prestations, loyers, honoraires', '20 %', '445710 / 445660'],
+   313→                ['Électricité (EDF PRO)', '5,5 %', '445660'],
+   314→                ['Acquisition d’immobilisation (scanner)', '20 %', '445620'],
+   315→              ],
+   316→            },
+   317→          },
+   318→          {
+   319→            kind: 'warn',
+   320→            title: 'Anomalies TVA du dossier',
+   321→            text: 'Février : TVA 20 % sur l’électricité (ANO-003) ; 445580 non soldé (ANO-042) ; rabais fournisseur non déduit (ANO-046) ; escompte obtenu non traité (ANO-024).',
+   322→          },
+   323→        ],
+   324→      },
+   325→    ],
+   326→    workshopView: 'tva',
+   327→    exerciseKeys: [
+   328→      'A6-E01', 'A6-C01', 'A6-C02', 'A6-C03', 'A6-C04', 'A6-C05',
+   329→      'A6-Q01', 'A6-Q02', 'A6-Q03', 'A6-Q04', 'A6-D01', 'A6-M01',
+   330→    ],
+   331→    validationCriteria: ['Liquidations mensuelles correctes', 'Anomalies de TVA du dossier détectées'],
+   332→  }),
+   333→  M({
+   334→    code: 'A7',
+   335→    order: 7,
+   336→    title: 'Immobilisations et amortissements',
+   337→    summary: 'Charge vs immobilisation, coût d\u2019entrée, mise en service, plans linéaires, cessions, VNC.',
+   338→    objectives: [
+   339→      'Construire un plan d\u2019amortissement linéaire',
+   340→      'Comptabiliser dotations et cessions',
+   341→      'Recalculer les dotations fournies par le client',
+   342→    ],
+   343→    prerequisites: ['A3'],
+   344→    competencies: ['CP10'],
+   345→    lessons: [
+   346→      {
+   347→        id: 'A7-L1',
+   348→        title: 'Amortissement linéaire : coût, durée, prorata',
+   349→        blocks: [
+   350→          {
+   351→            kind: 'text',
+   352→            text: "Dotation annuelle = coût × 1/durée, en prorata temporis depuis la mise en service (et non la facture). La cession sort l'actif, reprend les amortissements, constate le prix en produit et la VNC en charge exceptionnelle.",
+   353→          },
+   354→          {
+   355→            kind: 'table',
+   356→            title: 'Cas concrets du registre',
+   357→            table: {
+   358→              headers: ['Actif', 'Coût / durée', 'Dotation 2024', 'Remarque'],
+   359→              rows: [
+   360→                ['IMMO-01 Serveurs', '24 000 € / 5 ans', '4 800,00 €', 'Le client propose 6 000,00 € sur 4 ans (ANO-018)'],
+   361→                ['IMMO-08 Scanner', '6 000 € / 5 ans, MIS 10/07', '600,00 €', 'Absent du tableau client (ANO-017)'],
+   362→                ['IMMO-09 Tablette', '3 000 € / 4 ans, cédée 15/09', '—', 'Cession non comptabilisée (ANO-038)'],
+   363→              ],
+   364→            },
+   365→          },
+   366→          {
+   367→            kind: 'example',
+   368→            title: 'Exemple corrigé : cession',
+   369→            text: 'Tablette cédée 900,00 € : D512000 900,00 / D675600 1 031,25 / D281830 1 968,75 / C218300 3 000,00 / C775600 900,00 — la moins-value ressort à −131,25 €.',
+   370→          },
+   371→        ],
+   372→      },
+   373→    ],
+   374→    workshopView: 'immo',
+   375→    exerciseKeys: ['A7-E01', 'A7-E02', 'A7-C01', 'A7-C02', 'A7-C03', 'A7-Q01', 'A7-Q02', 'A7-Q03', 'A7-D01', 'A7-X01'],
+   376→    validationCriteria: ['Plans d\u2019amortissement recalculés justes', 'Cession traitée complètement'],
+   377→  }),
+   378→  M({
+   379→    code: 'A8',
+   380→    order: 8,
+   381→    title: 'Stocks et inventaire physique',
+   382→    summary: 'Inventaire physique, quantités, valorisation au coût, écarts, dépréciation, cut-off, transit.',
+   383→    objectives: [
+   384→      'Valoriser un stock au coût',
+   385→      'Analyser les écarts d\u2019inventaire',
+   386→      'Comptabiliser dépréciations et variation de stock',
+   387→    ],
+   388→    prerequisites: ['A3'],
+   389→    competencies: ['CP11'],
+   390→    lessons: [
+   391→      {
+   392→        id: 'A8-L1',
+   393→        title: 'Valoriser les stocks au coût',
+   394→        blocks: [
+   395→          {
+   396→            kind: 'text',
+   397→            text: "Le stock final se valorise au coût d'acquisition. Les écarts d'inventaire s'analysent avant régularisation. Les références obsolètes se déprécient à la valeur nette de réalisation.",
+   398→          },
+   399→          {
+   400→            kind: 'table',
+   401→            title: 'Alertes de l’inventaire du dossier',
+   402→            table: {
+   403→              headers: ['Référence', 'Constat', 'Traitement'],
+   404→              rows: [
+   405→                ['REF-LT15 (40 portables)', '12 800,00 € au coût, invendus 10 mois', 'Dépréciation 7 680,00 € (60 %)'],
+   406→                ['REF-EC27 (écrans 27")', '5 unités manquantes (1 350,00 €)', 'Analyse puis 603700/355100'],
+   407→                ['Lot du 30/12', '8 400,00 € HT en quarantaine', 'Stock en transit (371000) ou FNP'],
+   408→              ],
+   409→            },
+   410→          },
+   411→          {
+   412→            kind: 'example',
+   413→            title: 'Exemple corrigé : la dépréciation',
+   414→            text: 'D681700 7 680,00 / C395500 7 680,00 (journal OD) : la valeur de réalisation (40 %) devient le plafond de valorisation.',
+   415→          },
+   416→        ],
+   417→      },
+   418→    ],
+   419→    workshopView: 'stocks',
+   420→    exerciseKeys: ['A8-C01', 'A8-Q01', 'A8-Q02', 'A8-D01', 'A8-S01'],
+   421→    validationCriteria: ['Écart d\u2019inventaire analysé et traité', 'Dépréciation chiffrée et justifiée'],
+   422→  }),
+   423→  M({
+   424→    code: 'A9',
+   425→    order: 9,
+   426→    title: 'Paie et organismes sociaux',
+   427→    summary: 'Lecture des journaux de paie, écritures, rapprochements, dettes sociales, charges à rattacher.',
+   428→    objectives: [
+   429→      'Comptabiliser la paie mensuelle',
+   430→      'Rapprocher les comptes URSSAF et retraite',
+   431→      'Détecter les anomalies de paie',
+   432→    ],
+   433→    prerequisites: ['A3'],
+   434→    competencies: ['CP12'],
+   435→    lessons: [
+   436→      {
+   437→        id: 'A9-L1',
+   438→        title: 'La paie et ses comptes',
+   439→        blocks: [
+   440→          {
+   441→            kind: 'text',
+   442→            text: "Brut (641000) et charges patronales (645000) au débit ; net à payer (421000), URSSAF (431000) et retraite (437000) au crédit. Les règlements partent le mois suivant (15 et 5).",
+   443→          },
+   444→          {
+   445→            kind: 'example',
+   446→            title: 'Exemple corrigé : la paie type',
+   447→            text: 'D641000 37 500,00 / D645000 15 750,00 / C421000 29 625,00 / C431000 17 400,00 / C437000 6 225,00 — débits = crédits = 53 250,00 €.',
+   448→          },
+   449→          {
+   450→            kind: 'warn',
+   451→            title: 'Anomalies paie du dossier',
+   452→            text: 'Juin : doublon d’apprenti 950,00 € (ANO-026) ; avril : double prélèvement URSSAF (ANO-027) ; octobre : avance salarié non remboursée 400,00 € (ANO-046).',
+   453→          },
+   454→        ],
+   455→      },
+   456→    ],
+   457→    workshopView: 'paie',
+   458→    exerciseKeys: ['A9-E01', 'A9-E02', 'A9-Q01', 'A9-Q02', 'A9-Q03', 'A9-D01', 'A9-S01'],
+   459→    validationCriteria: ['Paies mensuelles rapprochées', 'Anomalies de paie détectées (doublons, avances)'],
+   460→  }),
+   461→  M({
+   462→    code: 'A10',
+   463→    order: 10,
+   464→    title: 'Révision par cycle',
+   465→    summary: 'Justification des soldes, contrôles analytiques, rapprochements, pièces manquantes, conclusions documentées.',
+   466→    objectives: [
+   467→      'Justifier un solde par les pièces',
+   468→      'Documenter une fiche de justification',
+   469→      'Conclure et remonter les anomalies',
+   470→    ],
+   471→    prerequisites: ['A5', 'A6', 'A7', 'A8', 'A9'],
+   472→    competencies: ['CP13', 'TR03'],
+   473→    lessons: [
+   474→      {
+   475→        id: 'A10-L1',
+   476→        title: 'Justifier un solde : la démarche de révision',
+   477→        blocks: [
+   478→          {
+   479→            kind: 'text',
+   480→            text: "Rapprocher le solde de son support : pièces, rapprochements, contrôles analytiques. Documenter la conclusion et remonter les anomalies au registre avec gravité et impact.",
+   481→          },
+   482→          {
+   483→            kind: 'list',
+   484→            title: 'La démarche en 6 temps',
+   485→            items: [
+   486→              'Comprendre le cycle et les faits générateurs',
+   487→              'Identifier les risques d’anomalies',
+   488→              'Définir les contrôles et justifications',
+   489→              'Exécuter (lettrage, balances âgées, pièces)',
+   490→              'Conclure et documenter (feuille de travail)',
+   491→              'Remonter les anomalies au registre et suivre',
+   492→            ],
+   493→          },
+   494→          {
+   495→            kind: 'tip',
+   496→            title: 'Contrôles analytiques rapides',
+   497→            text: 'Marge sur coût d’achat (≈ 25 % sur une revente 12 000 → 15 000), rapport TVA/ventes (20 %), masse salariale/-effectif : tout écart anormal appelle une explication.',
+   498→          },
+   499→        ],
+   500→      },
+   501→    ],
+   502→    workshopView: 'revision',
+   503→    exerciseKeys: ['A10-C01', 'A10-Q01', 'A10-Q02', 'A10-Q03', 'A10-D01', 'A10-M01', 'A10-O01', 'A10-S01'],
+   504→    validationCriteria: ['Fiches de justification complétées', 'Registre des anomalies tenu à jour'],
+   505→  }),
+   506→  M({
+   507→    code: 'A11',
+   508→    order: 11,
+   509→    title: 'Inventaire comptable et régularisations',
+   510→    summary: 'FNP, FAE, CCA, PCA, charges à payer, produits à recevoir, amortissements, dépréciations, provisions.',
+   511→    objectives: [
+   512→      'Passer les écritures de coupure d\u2019exercice',
+   513→      'Provisionner les estimations documentées',
+   514→      'Équilibrer le journal d\u2019inventaire',
+   515→    ],
+   516→    prerequisites: ['A10'],
+   517→    competencies: ['CP14'],
+   518→    lessons: [
+   519→      {
+   520→        id: 'A11-L1',
+   521→        title: 'La coupure d\u2019exercice',
+   522→        blocks: [
+   523→          {
+   524→            kind: 'text',
+   525→            text: "Rattacher à l'exercice ce qui le concerne : FNP (charges non facturées), FAE/produits à recevoir (travaux non facturés), CCA (charges payées d'avance), PCA (produits encaissés d'avance), provisions pour risques, intérêts courus, congés à payer.",
+   526→          },
+   527→          {
+   528→            kind: 'table',
+   529→            title: 'Écritures d’inventaire attendues dans le dossier',
+   530→            table: {
+   531→              headers: ['Situation', 'Écriture', 'Montant'],
+   532→              rows: [
+   533→                ['Assurance cyber (5 mois N+1)', 'D476000 / C616000', '1 000,00 €'],
+   534→                ['Maintenance facturée d’avance (10 mois)', 'D706000 / C477000', '3 300,00 €'],
+   535→                ['Transports décembre non facturés', 'D624100 + D445660 / C408000', '1 605,56 + 321,11 €'],
+   536→                ['Prestation C003 non facturée', 'D468700 / C706000 + C445710', '2 160,00 € TTC'],
+   537→                ['Congés à payer', 'D641000 / C428200', '9 800,00 €'],
+   538→                ['TVS', 'D635400 / C448600', '4 300,00 €'],
+   539→                ['Intérêts courus', 'D661100 / C168100', '402,00 €'],
+   540→                ['Créance C009 (douteux)', 'D416000 / C411000 puis D681700 / C491000', '21 400,00 € puis 19 260,00 €'],
+   541→              ],
+   542→            },
+   543→          },
+   544→          {
+   545→            kind: 'tip',
+   546→            title: 'Prorata temporis',
+   547→            text: 'CCA/PCA se calculent en mois : prime × mois restants / 12. La mise en service (jamais la facture) ouvre l’amortissement.',
+   548→          },
+   549→        ],
+   550→      },
+   551→    ],
+   552→    workshopView: 'cloture',
+   553→    exerciseKeys: [
+   554→      'A11-E01', 'A11-E02', 'A11-C01', 'A11-C02', 'A11-C03', 'A11-C04', 'A11-C05',
+   555→      'A11-Q01', 'A11-Q02', 'A11-Q03', 'A11-D01', 'A11-M01', 'A11-O01', 'A11-X01', 'A11-X02',
+   556→    ],
+   557→    validationCriteria: ['Journal d\u2019inventaire équilibré et justifié', 'Toutes les régularisations attendues traitées'],
+   558→  }),
+   559→  M({
+   560→    code: 'A12',
+   561→    order: 12,
+   562→    title: 'États financiers et dossier de revue',
+   563→    summary: 'Balance après inventaire, bilan, compte de résultat, contrôles de cohérence, préparation du dossier de revue.',
+   564→    objectives: [
+   565→      'Établir les états financiers depuis la balance',
+   566→      'Vérifier tous les contrôles de cohérence',
+   567→      'Préparer un dossier de revue complet',
+   568→    ],
+   569→    prerequisites: ['A11'],
+   570→    competencies: ['CP15'],
+   571→    lessons: [
+   572→      {
+   573→        id: 'A12-L1',
+   574→        title: 'Des écritures aux états financiers',
+   575→        blocks: [
+   576→          {
+   577→            kind: 'text',
+   578→            text: "La balance après inventaire alimente le bilan et le compte de résultat. Contrôles : balance équilibrée ; actif − passif = résultat intégré (après solde des 6/7 en 120000) ; résultat CR = résultat bilan.",
+   579→          },
+   580→          {
+   581→            kind: 'table',
+   582→            title: 'Chiffres clés du dossier (avant inventaire)',
+   583→            table: {
+   584→              headers: ['Indicateur', 'Montant'],
+   585→              rows: [
+   586→                ['CA HT (ventes + prestations)', '2 938 141,18 €'],
+   587→                ['Résultat avant IS', '+86 065,97 € (2,9 % du CA)'],
+   588→                ['Total actif net', '703 753,09 €'],
+   589→                ['Total passif', '617 687,12 €'],
+   590→                ['Écart actif − passif (= résultat latent)', '86 065,97 €'],
+   591→                ['Seuil de signification (1,5 % CA)', '44 072,12 €'],
+   592→              ],
+   593→            },
+   594→          },
+   595→          {
+   596→            kind: 'tip',
+   597→            title: 'L’écart actif − passif',
+   598→            text: 'Avant affectation, l’excédent d’actif sur le passif mesure le résultat latent de la période : c’est le contrôle croisé bilan ↔ compte de résultat.',
+   599→          },
+   600→        ],
+   601→      },
+   602→    ],
+   603→    workshopView: 'etats',
+   604→    exerciseKeys: ['A12-C01', 'A12-C02', 'A12-Q01', 'A12-Q02', 'A12-S01'],
+   605→    validationCriteria: ['Bilan et CR cohérents avec la balance', 'Contrôles de cohérence au vert'],
+   606→  }),
+   607→  M({
+   608→    code: 'A13',
+   609→    order: 13,
+   610→    title: 'Communication professionnelle',
+   611→    summary: 'Questions au client, demandes de pièces, compte rendu, documentation, points en suspens.',
+   612→    objectives: [
+   613→      'Rédiger une note de synthèse',
+   614→      'Formuler des demandes de pièces efficaces',
+   615→      'Gérer et clore les points en suspens',
+   616→    ],
+   617→    prerequisites: ['A12'],
+   618→    competencies: ['CP16', 'TR03', 'TR04'],
+   619→    lessons: [
+   620→      {
+   621→        id: 'A13-L1',
+   622→        title: 'La note de synthèse',
+   623→        blocks: [
+   624→          {
+   625→            kind: 'text',
+   626→            text: "Conclusion d'abord, faits ensuite : travaux réalisés, anomalies hiérarchisées, points en suspens avec responsable et échéance, recommandations. Une page suffit souvent.",
+   627→          },
+   628→          {
+   629→            kind: 'list',
+   630→            title: 'Les 5 règles du courriel professionnel',
+   631→            items: [
+   632→              'Objet explicite (pièce, période, action attendue)',
+   633→              'Conclusion en tête, pièces et références ensuite',
+   634→              'Chiffrer systématiquement (montant, incidence)',
+   635→              'Dater et fixer une échéance de retour',
+   636→              'Tracer la demande dans le suivi des suspens',
+   637→            ],
+   638→          },
+   639→        ],
+   640→      },
+   641→    ],
+   642→    exerciseKeys: ['A13-Q01', 'A13-Q02', 'A13-S01', 'A13-S02', 'A13-S03', 'A13-X01'],
+   643→    validationCriteria: ['Note de synthèse structurée et complète'],
+   644→  }),
+   645→]
+   646→

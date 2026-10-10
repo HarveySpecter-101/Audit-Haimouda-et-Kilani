@@ -1,0 +1,249 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// ACCOUNTING & AUDIT SIMULATOR — Schéma métier
+// Fil rouge : NOVATECH DISTRIBUTION SAS (fictif)
+// Source de vérité unique : EntryLine (partie double)
+// ============================================================
+
+model Client {
+  id              String   @id @default("novatech")
+  name            String
+  legalForm       String
+  siren           String
+  siret           String
+  vatNumber       String
+  ape             String
+  address         String
+  postalCode      String
+  city            String
+  country         String   @default("France")
+  sector          String
+  headcount       Int      @default(12)
+  capital         Float
+  incorporationAt DateTime
+  fiscalRegime    String   @default("Réel normal")
+  vatRegime       String   @default("TVA - débit - mensuelle")
+  isSubjectToVat  Boolean  @default(true)
+  // Dossier permanent
+  permanentFile   Json
+  createdAt       DateTime @default(now())
+}
+
+model FiscalYear {
+  id        String   @id @default("FY-N")
+  clientId  String   @default("novatech")
+  label     String
+  startDate DateTime
+  endDate   DateTime
+  status    String   @default("OPEN") // OPEN | CLOSING | CLOSED
+}
+
+// ---------- Moteur comptable ----------
+
+model Journal {
+  code  String @id // ACH, VTE, BQE, CAI, OD, PAIE, SOC
+  label String
+  type  String // ACHATS | VENTES | BANQUE | CAISSE | OD | PAIE | SOCIAL
+}
+
+model Entry {
+  id         String   @id @default(cuid())
+  journal    String
+  date       DateTime
+  pieceRef   String
+  label      String
+  status     String   @default("POSTED") // DRAFT | POSTED | CANCELLED
+  source     String   @default("SEED") // SEED | LEARNER | CLOSING | CORRECTION
+  reversalOf String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  lines      EntryLine[]
+}
+
+model EntryLine {
+  id          String  @id @default(cuid())
+  entryId     String
+  entry       Entry   @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  accountCode String
+  accountAux  String? // code auxiliaire tiers (client/fournisseur)
+  label       String
+  debit       Float   @default(0)
+  credit      Float   @default(0)
+  letter      String? // marque de lettrage
+  isSeed      Boolean @default(true)
+}
+
+model LetteringGroup {
+  id          String   @id @default(cuid())
+  auxCode     String
+  letter      String
+  lineIds     Json
+  amount      Float
+  createdAt   DateTime @default(now())
+  createdBy   String   @default("learner")
+}
+
+// ---------- Centre documentaire ----------
+
+model Document {
+  id           String   @id @default(cuid())
+  ref          String   @unique
+  type         String // INVOICE_SUPPLIER | INVOICE_CLIENT | CREDIT_NOTE | BANK_STATEMENT | PAYSLIP | CONTRACT | INVENTORY | LEASE | OTHER
+  date         DateTime
+  title        String
+  thirdParty   String?
+  amount       Float?
+  currency     String   @default("EUR")
+  journal      String?
+  entryId      String?
+  status       String   @default("PENDING") // PENDING | PROCESSED | MISSING | ARCHIVED
+  content      Json // détail lisible (lignes, TVA, mentions)
+  anomalyCode  String?
+  duplicateOf  String?
+  createdAt    DateTime @default(now())
+}
+
+// ---------- Registre des anomalies ----------
+
+model Anomaly {
+  id             String    @id @default(cuid())
+  code           String    @unique // ANO-001..
+  title          String
+  description    String
+  hint           String
+  category       String // DOUBLON | TVA | IMPUTATION | TRESORERIE | PIECE | CUTOFF | STOCK | AMORTISSEMENT | LETTRAGE | OD | ESTIMATION | AUDIT
+  severity       String    @default("MEDIUM") // LOW | MEDIUM | HIGH | CRITICAL
+  path           String    @default("A") // A comptabilité | B audit
+  moduleCode     String?
+  relatedAccount String?
+  relatedEntryId String?
+  relatedDocRef  String?
+  status         String    @default("OPEN") // OPEN | RESOLVED | WAIVED
+  resolution     String?
+  impactAmount   Float?
+  detectedAt     DateTime?
+  resolvedAt     DateTime?
+  resolvedBy     String?
+  createdAt      DateTime  @default(now())
+}
+
+// ---------- Progression / évaluation ----------
+
+model Progress {
+  id             String   @id @default(cuid())
+  path           String // A | B
+  moduleCode     String
+  status         String   @default("NOT_STARTED") // NOT_STARTED | IN_PROGRESS | COMPLETED
+  score          Float    @default(0)
+  criticalErrors Int      @default(0)
+  lessonsRead    Json
+  lastActivityAt DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  @@unique([path, moduleCode])
+}
+
+model Competency {
+  id     String @id @default(cuid())
+  code   String @unique
+  label  String
+  domain String // COMPTA | AUDIT | TRANSVERSE
+  path   String @default("A")
+  level  Int    @default(0) // 0..5
+  status String @default("NOT_STARTED") // NOT_STARTED | IN_PROGRESS | GUIDED | AUTONOMOUS | TO_REVIEW
+}
+
+model ExerciseAttempt {
+  id            String   @id @default(cuid())
+  exerciseKey   String
+  path          String
+  moduleCode    String
+  answer        Json
+  score         Float    @default(0)
+  passed        Boolean  @default(false)
+  criticalError Boolean  @default(false)
+  feedback      Json
+  usedHints     Int      @default(0)
+  mode          String   @default("guided") // guided | mission | exam
+  durationMs    Int?
+  attemptedAt   DateTime @default(now())
+}
+
+model TaskCompletion {
+  id        String   @id @default(cuid())
+  taskKey   String
+  month     Int
+  path      String
+  doneAt    DateTime @default(now())
+  @@unique([taskKey])
+}
+
+// ---------- Livrables ----------
+
+model Deliverable {
+  id                String   @id @default(cuid())
+  code              String   @unique
+  title             String
+  category          String   @default("ACCOUNTING") // ACCOUNTING | AUDIT
+  type              String // LETTRAGE | BANK_RECON | VAT_TABLE | DEPRECIATION | CLOSING | BALANCE | REVIEW_SHEET | RISK_MATRIX | MATERIALITY | ...
+  status            String   @default("BLANK") // BLANK | DRAFT | READY_FOR_REVIEW | COMMENTED | TO_CORRECT | VALIDATED | CLOSED
+  moduleCode        String?
+  content           Json // travail de l'apprenant (champs modifiables)
+  reviewerComments  Json // commentaires simulés du chef de mission
+  versions          Json // historique {at, summary, snapshot}
+  isExample         Boolean  @default(false) // exemple corrigé fourni
+  exampleContent    Json
+  updatedAt         DateTime @updatedAt
+  createdAt         DateTime @default(now())
+}
+
+// ---------- Rapprochement bancaire ----------
+
+model BankStatementLine {
+  id          String  @id @default(cuid())
+  month       Int
+  date        DateTime
+  label       String
+  debit       Float   @default(0) // débit du relevé = sortie d'argent
+  credit      Float   @default(0) // crédit du relevé = entrée
+  balance     Float   @default(0)
+  matched     Boolean @default(false)
+  matchedRef  String? // ref écriture de banque correspondante
+  anomalyCode String?
+}
+
+model BankReconciliation {
+  id             String   @id @default(cuid())
+  month          Int      @unique
+  status         String   @default("IN_PROGRESS") // IN_PROGRESS | VALIDATED
+  matchedLines   Json
+  notes          String?
+  updatedAt      DateTime @updatedAt
+}
+
+// ---------- Paramètres / persistance apprenant ----------
+
+model Setting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value Json
+  updatedAt DateTime @updatedAt
+}
+
+// ---------- Journal des changements (traçabilité) ----------
+
+model ChangeLog {
+  id        String   @id @default(cuid())
+  entity    String
+  entityId  String?
+  action    String
+  detail    Json
+  createdAt DateTime @default(now())
+}

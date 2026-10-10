@@ -530,6 +530,57 @@ main th.truncate {
   }
 }
 
+/* ============ Fiche pratique — impression isolée ============ */
+/* Le bouton « Imprimer » d'une fiche pratique pose
+   data-print-mode="fiche" sur <body> avant window.print() et le
+   retire après (afterprint + 1 s). Même isolation que
+   l'attestation : les règles sont STRICTEMENT conditionnées à cet
+   attribut — aucun impact sur les autres flux d'impression. */
+@media print {
+  body[data-print-mode='fiche'] * {
+    visibility: hidden !important;
+  }
+  body[data-print-mode='fiche'] .print-fiche-root,
+  body[data-print-mode='fiche'] .print-fiche-root * {
+    visibility: visible !important;
+  }
+  /* La fiche occupe seule la page (les blocs longs se répartissent
+     sur plusieurs pages : hauteur libre, largeur pleine). */
+  body[data-print-mode='fiche'] .print-fiche-root {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    font-size: 10.5pt;
+    line-height: 1.5;
+  }
+  /* Noir sur blanc, lisible quel que soit le thème actif : fond du
+     conteneur neutralisé, texte sombre, fonds internes retirés
+     (les traits des encadrés et tableaux restent). */
+  body[data-print-mode='fiche'] .print-fiche-root {
+    background: white !important;
+    color: #0f172a !important; /* slate-900 */
+  }
+  body[data-print-mode='fiche'] .print-fiche-root *:not([data-slot='separator']) {
+    background-color: transparent !important;
+  }
+  body[data-print-mode='fiche'] .print-fiche-root .text-muted-foreground {
+    color: #475569 !important; /* slate-600 */
+  }
+  body[data-print-mode='fiche'] .print-fiche-root .text-primary {
+    color: #0f766e !important; /* teal-700 — titres et accents */
+  }
+  /* Chaque bloc (texte, liste, tableau, vigilance, exemple) reste
+     entier : pas de coupure au milieu d'un encadré. */
+  body[data-print-mode='fiche'] .print-fiche-body > div > * {
+    break-inside: avoid;
+  }
+  body[data-print-mode='fiche'] .print-fiche-body {
+    padding: 0 0 0 0;
+    border: 0;
+  }
+}
+
 /* ============ F-8e — Polish détails (CR-7) ============ */
 
 /* Sparklines « Performance par module » : les points grossissent au

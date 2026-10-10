@@ -1,0 +1,752 @@
+     1→'use client'
+     2→
+     3→import { useRef, useState } from 'react'
+     4→import { useQuery } from '@tanstack/react-query'
+     5→import { ArrowUpRight, CalendarCheck, CheckCircle2, ChevronRight, FileDown, Flame, X } from 'lucide-react'
+     6→import { Skeleton } from '@/components/ui/skeleton'
+     7→import { useSimulator } from '@/lib/store/simulator-store'
+     8→
+     9→// ============================================================
+    10→// ASSIDUITÉ — HEATMAP DES TENTATIVES (84 jours, style GitHub)
+    11→// Pur SVG sans dépendance, dans l'esprit de mini-charts.tsx :
+    12→// role="img" + aria-label descriptif, tooltips natifs <title>
+    13→// par cellule, chiffres tabular-nums, responsive (viewBox + w-full).
+    14→// Grille : 1 colonne = 1 semaine (lundi → dimanche), 1 ligne = 1 jour
+    15→// de semaine ; cellules 12×12 px, écart 3 px, arrondi 2 px.
+    16→// Échelle de niveaux 0-4 : 0 = gris sourd « sans activité » ;
+    17→// 1-4 = dégradé teal via color-mix sur var(--primary) — les
+    18→// couleurs dérivent des variables CSS, donc clair comme sombre.
+    19→// Drill-down : un clic (ou Entrée) sur une journée active ouvre
+    20→// le détail des tentatives du jour (requête /api/attempts?date=),
+    21→// et chaque tentative est un lien direct vers l'exercice
+    22→// (navigation → Parcours, module ouvert, exercice sélectionné).
+    23→// F-8c : filtre par mode (guidé/mission/examen) du panneau du jour —
+    24→//   l'état est { date, mode } : le mode effectif est DÉRIVÉ de la
+    25→//   date courante, donc changer de journée retombe sur « Tous » sans
+    26→//   aucun setState dans un effet (règle react-hooks/set-state-in-effect).
+    27→// F-8d : accès direct « aujourd'hui » — chip cliquable (toggle du
+    28→//   panneau du dernier jour) + raccourci clavier local « D » quand le
+    29→//   focus est dans le composant (cf. handleRootKeyDown).
+    30→// F-9b : comparaison avec la période précédente — toggle « vs période
+    31→//   précédente » (ChevronRight pivotant, aria-expanded) sous la légende,
+    32→//   panneau compact de 3 métriques (tentatives, jours actifs, réussites)
+    33→//   avec delta coloré + phrase de synthèse ; masqué si la prop
+    34→//   « previous » est absente (payload en cache antérieur).
+    35→// F-9c : export CSV de l'historique — bouton « Exporter CSV » (icône
+    36→//   FileDown, no-print) dans la rangée des chips : BOM UTF-8,
+    37→//   séparateur point-virgule (Excel-FR), constructeur pur
+    38→//   buildActivityCsv() exporté et testable, téléchargement silencieux
+    39→//   via Blob + ancre éphémère (aucun toast).
+    40→// ============================================================
+    41→
+    42→export interface ActivityDay {
+    43→  date: string // 'YYYY-MM-DD'
+    44→  count: number
+    45→}
+    46→
+    47→/** F-9b — agrégats des 84 jours précédant la fenêtre courante, tels que
+    48→ *  renvoyés par /api/dashboard dans activity.previous. « passed » est
+    49→ *  optionnel côté client : un payload partiel omet simplement la ligne
+    50→ *  « Réussites » de la comparaison (dégradation gracieuse). */
+    51→export interface ActivityPreviousPeriod {
+    52→  /** Tentatives totales sur les 84 jours précédents */
+    53→  total: number
+    54→  /** Jours actifs (≥ 1 tentative) sur les 84 jours précédents */
+    55→  activeDays: number
+    56→  /** Tentatives réussies sur les 84 jours précédents */
+    57→  passed?: number
+    58→}
+    59→
+    60→export interface ActivityHeatmapProps {
+    61→  /** 84 entrées consécutives — la dernière correspond à aujourd'hui */
+    62→  days: ActivityDay[]
+    63→  total: number
+    64→  activeDays: number
+    65→  streak: number
+    66→  /** Tentatives du jour — prop canonique du composant */
+    67→  todayCount?: number
+    68→  /** Champ « today » du payload /api/dashboard (accepté en repli) */
+    69→  today?: number
+    70→  /** Champ « bestDay » du payload (sinon recalculé localement) */
+    71→  bestDay?: number
+    72→  /** F-9b — tentatives réussies de la fenêtre courante (activity.passed) ;
+    73→ *  absent des payloads en cache antérieurs → ligne « Réussites » omise */
+    74→  passed?: number
+    75→  /** F-9b — agrégats des 84 jours précédents (activity.previous) ; absent
+    76→ *  des payloads en cache antérieurs → comparaison entièrement masquée */
+    77→  previous?: ActivityPreviousPeriod
+    78→}
+    79→
+    80→interface DayAttempt {
+    81→  id: string
+    82→  exerciseKey: string
+    83→  moduleCode: string
+    84→  path: string
+    85→  score: number
+    86→  passed: boolean
+    87→  mode: string
+    88→  usedHints: number
+    89→  criticalError: boolean
+    90→  attemptedAt: string
+    91→}
+    92→
+    93→// F-8c — modes de tentative proposés en filtre du panneau du jour.
+    94→type DayFilterMode = 'all' | 'guided' | 'mission' | 'exam'
+    95→
+    96→const MODE_LABELS: Record<Exclude<DayFilterMode, 'all'>, string> = {
+    97→  guided: 'guidé',
+    98→  mission: 'mission',
+    99→  exam: 'examen',
+   100→}
+   101→
+   102→/** Libellé français du mode d'une tentative (repli « guidé ») — réutilisé
+   103→ *  par les lignes du panneau du jour et les messages/contreurs du filtre. */
+   104→function modeLabel(mode: string): string {
+   105→  return mode === 'exam' ? MODE_LABELS.exam : mode === 'mission' ? MODE_LABELS.mission : MODE_LABELS.guided
+   106→}
+   107→
+   108→// Libellés de mois (calendrier français)
+   109→const MONTH_LABELS = ['Janv.', 'Févr.', 'Mars', 'Avr.', 'Mai', 'Juin', 'Juil.', 'Août', 'Sept.', 'Oct.', 'Nov.', 'Déc.']
+   110→
+   111→// Initiales de jours affichées à gauche (lundi, mardi, jeudi, vendredi —
+   112→// mercredi/samedi/dimanche masqués pour éviter la surcharge)
+   113→const WEEKDAY_ROWS: { row: number; label: string }[] = [
+   114→  { row: 0, label: 'L' },
+   115→  { row: 1, label: 'M' },
+   116→  { row: 3, label: 'J' },
+   117→  { row: 4, label: 'V' },
+   118→]
+   119→
+   120→// Échelle de niveaux 0-4 via color-mix (oklch) sur les variables du thème :
+   121→// le niveau 0 garde un gris perceptible clair/sombre — var(--muted) seul à 45 %
+   122→// serait invisible sur fond clair (L 0,96), d'où ce sourd « muted-foreground »
+   123→const LEVEL_FILLS = [
+   124→  'color-mix(in oklch, var(--muted-foreground) 14%, transparent)',
+   125→  'color-mix(in oklch, var(--primary) 35%, transparent)',
+   126→  'color-mix(in oklch, var(--primary) 55%, transparent)',
+   127→  'color-mix(in oklch, var(--primary) 75%, transparent)',
+   128→  'color-mix(in oklch, var(--primary) 95%, transparent)',
+   129→]
+   130→
+   131→/** Seuil d'un niveau : 0 → 0 ; 1-2 → 1 ; 3-4 → 2 ; 5-8 → 3 ; ≥ 9 → 4 */
+   132→function levelOf(count: number): number {
+   133→  if (count <= 0) return 0
+   134→  if (count <= 2) return 1
+   135→  if (count <= 4) return 2
+   136→  if (count <= 8) return 3
+   137→  return 4
+   138→}
+   139→
+   140→/** Libellés pédagogiques des niveaux de la légende (le seuil se
+   141→ *  lit dans le title du pastille et le texte sr-only). */
+   142→const LEVEL_HINTS = [
+   143→  'Aucune tentative ce jour-là',
+   144→  'Léger : 1 à 2 tentatives — un entretien de rappel quotidien',
+   145→  'Soutenu : 3 à 4 tentatives — une séance de travail régulière',
+   146→  'Intensif : 5 à 8 tentatives — une demi-journée de pratique',
+   147→  'Immersion : 9 tentatives ou plus — une journée complète dédiée',
+   148→]
+   149→
+   150→/** '2026-10-03' → '03/10/2026' (date française, sans pivot UTC) */
+   151→function fmtFR(iso: string): string {
+   152→  const [y, m, d] = iso.split('-')
+   153→  return `${d}/${m}/${y}`
+   154→}
+   155→
+   156→/** '2026-10-03' → « vendredi 3 octobre 2026 » (long, français) */
+   157→const LONG_DAYS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi']
+   158→const LONG_MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre']
+   159→function fmtLongFR(iso: string): string {
+   160→  const [ys, ms, ds] = iso.split('-')
+   161→  const d = new Date(Number(ys), Number(ms) - 1, Number(ds))
+   162→  return `${LONG_DAYS[d.getDay()]} ${Number(ds)} ${LONG_MONTHS[d.getMonth()]} ${ys}`
+   163→}
+   164→
+   165→/** Heure locale 'HH:MM' depuis l'horodatage d'une tentative. */
+   166→function fmtTime(iso: string): string {
+   167→  const d = new Date(iso)
+   168→  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+   169→}
+   170→
+   171→// ============================================================
+   172→// F-9b — comparaison période courante vs période précédente
+   173→// ============================================================
+   174→
+   175→/** Phrase de synthèse adaptée au signe de l'écart de tentatives entre
+   176→ *  la fenêtre courante et la fenêtre précédente (84 jours chacune). */
+   177→function comparisonTakeaway(current: number, prev: number): string {
+   178→  const diff = current - prev
+   179→  if (diff > 0) {
+   180→    return `Assiduité en hausse : +${diff} tentative${diff === 1 ? '' : 's'} par rapport aux 12 semaines précédentes.`
+   181→  }
+   182→  if (diff < 0) {
+   183→    return `Assiduité en baisse : −${-diff} tentative${diff === -1 ? '' : 's'} par rapport aux 12 semaines précédentes.`
+   184→  }
+   185→  return current === 0
+   186→    ? 'Aucune tentative sur aucune des deux périodes — la série démarre avec vous.'
+   187→    : 'Assiduité stable : autant de tentatives que sur les 12 semaines précédentes.'
+   188→}
+   189→
+   190→/** Couleur du delta (hausse / baisse / stable) — motif emerald/red établi
+   191→ *  dans tout le simulateur, muted pour l'égalité. */
+   192→function deltaTone(diff: number): string {
+   193→  if (diff > 0) return 'text-emerald-700 dark:text-emerald-400'
+   194→  if (diff < 0) return 'text-red-700 dark:text-red-400'
+   195→  return 'text-muted-foreground'
+   196→}
+   197→
+   198→/** F-9b — ligne de métrique comparée « libellé : X vs Y (delta) » :
+   199→ *  delta +N (emerald), −N (red), = (muted), chiffres tabular-nums. */
+   200→function ComparisonRow({ label, current, previous }: { label: string; current: number; previous: number }) {
+   201→  const diff = current - previous
+   202→  const delta = diff > 0 ? `+${diff}` : diff < 0 ? `−${-diff}` : '='
+   203→  return (
+   204→    <p className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+   205→      <span className="text-muted-foreground">{label}</span>
+   206→      <span className="tabular-nums">
+   207→        <span className="font-medium text-foreground">{current}</span>
+   208→        <span className="text-muted-foreground"> vs {previous}</span>
+   209→        <span className={`ml-1.5 font-medium ${deltaTone(diff)}`}>({delta})</span>
+   210→      </span>
+   211→    </p>
+   212→  )
+   213→}
+   214→
+   215→// ============================================================
+   216→// F-9c — export CSV de l'historique d'assiduité
+   217→// ============================================================
+   218→
+   219→/** F-9c — constructeur pur du CSV (testable unitairement) : BOM UTF-8 pour
+   220→ *  Excel, séparateur point-virgule (Excel-FR), en-tête « Date;Tentatives »,
+   221→ *  une ligne par jour « YYYY-MM-DD;count », ligne de total en fin — fins de
+   222→ *  ligne CRLF (RFC 4180). Aucune dépendance, aucun accès DOM. */
+   223→export function buildActivityCsv(days: ActivityDay[]): string {
+   224→  const lines: string[] = ['Date;Tentatives']
+   225→  let total = 0
+   226→  for (const day of days) {
+   227→    lines.push(`${day.date};${day.count}`)
+   228→    total += day.count
+   229→  }
+   230→  lines.push(`Total;${total}`)
+   231→  return `\uFEFF${lines.join('\r\n')}\r\n`
+   232→}
+   233→
+   234→/** F-9c — téléchargement silencieux (Blob + ancre éphémère, aucune toast) :
+   235→ *  l'ancre est attachée au document le temps du clic puis retirée, et
+   236→ *  l'URL d'objet est révoquée immédiatement après le déclenchement. */
+   237→function downloadActivityCsv(days: ActivityDay[]) {
+   238→  const blob = new Blob([buildActivityCsv(days)], { type: 'text/csv;charset=utf-8' })
+   239→  const url = URL.createObjectURL(blob)
+   240→  const anchor = document.createElement('a')
+   241→  anchor.href = url
+   242→  anchor.download = `assiduite-${days.length}-jours.csv`
+   243→  document.body.appendChild(anchor)
+   244→  anchor.click()
+   245→  anchor.remove()
+   246→  URL.revokeObjectURL(url)
+   247→}
+   248→
+   249→// Géométrie du viewBox (le SVG est responsive : w-full borné, h-auto)
+   250→const CELL = 12
+   251→const GAP = 3
+   252→const PITCH = CELL + GAP
+   253→const GX = 17 // gouttière des initiales de jours
+   254→const GY = 15 // rangée des libellés de mois
+   255→
+   256→export function ActivityHeatmap({
+   257→  days,
+   258→  total,
+   259→  activeDays,
+   260→  streak,
+   261→  todayCount,
+   262→  today,
+   263→  bestDay,
+   264→  passed,
+   265→  previous,
+   266→}: ActivityHeatmapProps) {
+   267→  const [selected, setSelected] = useState<string | null>(null)
+   268→  // F-9b — panneau de comparaison ouvert/fermé (les métriques comparées
+   269→  // sont intégralement DÉRIVÉES des props : zéro effet, zéro état dérivé
+   270→  // synchronisé — seul l'ouverture est un état local).
+   271→  const [compareOpen, setCompareOpen] = useState(false)
+   272→  // F-8c — filtre par mode du panneau du jour, clé par date : le mode
+   273→  // effectif est DÉRIVÉ (dayFilter.date === selected ? mode : 'all'),
+   274→  // changer de journée retombe naturellement sur « Tous » sans le
+   275→  // moindre setState dans un effet (règle react-hooks/set-state-in-effect).
+   276→  const [dayFilter, setDayFilter] = useState<{ date: string; mode: DayFilterMode }>({ date: '', mode: 'all' })
+   277→  // F-8d — horodatage du dernier « g » nu capté dans le composant :
+   278→  // miroir local de l'armement des raccourcis globaux (g puis lettre,
+   279→  // fenêtre ~900 ms) afin de céder « d » à la séquence de navigation
+   280→  // quand elle vient d'être armée (cf. handleRootKeyDown).
+   281→  const gArmedAtRef = useRef(0)
+   282→  const navigate = useSimulator((s) => s.navigate)
+   283→
+   284→  // Détail des tentatives de la journée sélectionnée (drill-down)
+   285→  const dayQuery = useQuery<{ attempts: DayAttempt[] }>({
+   286→    queryKey: ['attempts-day', selected],
+   287→    enabled: !!selected,
+   288→    queryFn: async () => {
+   289→      const res = await fetch(`/api/attempts?date=${selected}&limit=100`)
+   290→      if (!res.ok) throw new Error('Erreur de lecture des tentatives du jour.')
+   291→      return res.json()
+   292→    },
+   293→    refetchOnWindowFocus: false,
+   294→    staleTime: 30_000,
+   295→  })
+   296→
+   297→  if (!days.length) return null
+   298→
+   299→  const todayN = todayCount ?? today ?? 0
+   300→  const best = bestDay ?? days.reduce((m, d) => Math.max(m, d.count), 0)
+   301→  // « aujourd'hui » = dernière entrée de days (convention du composant)
+   302→  const todayDate = days[days.length - 1].date
+   303→  const todayPanelOpen = selected === todayDate
+   304→
+   305→  // Analyse locale des dates — jamais new Date(iso) : pivot UTC selon le fuseau
+   306→  const cells = days.map((d) => {
+   307→    const [ys, ms, ds] = d.date.split('-')
+   308→    return { date: d.date, count: d.count, at: new Date(Number(ys), Number(ms) - 1, Number(ds)) }
+   309→  })
+   310→  // Alignement lundi : décalage de la première colonne (cellules vides avant la fenêtre)
+   311→  const offset = (cells[0].at.getDay() + 6) % 7
+   312→  const cols = Math.ceil((offset + cells.length) / 7)
+   313→
+   314→  const W = GX + cols * PITCH - GAP + 3
+   315→  const H = GY + 7 * PITCH - GAP + 3
+   316→
+   317→  // Libellé de mois au-dessus d'une colonne quand la semaine change de mois
+   318→  // (mois du DERNIER jour réel de la colonne — couvre un mois qui débute en
+   319→  // cours de semaine) ; garde-fou anti-chevauchement de libellés adjacents
+   320→  const monthLabels: { col: number; label: string }[] = []
+   321→  let lastLabelRight = -Infinity
+   322→  for (let c = 0; c < cols; c++) {
+   323→    const lastSlot = Math.min((c + 1) * 7 - 1, offset + cells.length - 1)
+   324→    const month = cells[lastSlot - offset].at.getMonth()
+   325→    const prevLastSlot = c === 0 ? -1 : Math.min(c * 7 - 1, offset + cells.length - 1)
+   326→    const prevMonth = prevLastSlot < offset ? -1 : cells[prevLastSlot - offset].at.getMonth()
+   327→    if (month === prevMonth) continue
+   328→    const label = MONTH_LABELS[month]
+   329→    const center = GX + c * PITCH + CELL / 2
+   330→    const halfW = (label.length * 4.6) / 2
+   331→    if (center - halfW < lastLabelRight + 1.5) continue
+   332→    monthLabels.push({ col: c, label })
+   333→    lastLabelRight = center + halfW
+   334→  }
+   335→
+   336→  const summary =
+   337→    `Assiduité sur ${cells.length} jours : ${total} tentatives au total, ${activeDays} jours actifs, ` +
+   338→    `${best} tentatives au maximum en une journée, série en cours de ${streak} jour${streak === 1 ? '' : 's'}, ` +
+   339→    `${todayN} tentative${todayN === 1 ? '' : 's'} aujourd'hui. Cliquez sur une journée active pour voir le détail des tentatives.`
+   340→
+   341→  const toggleDay = (date: string) => {
+   342→    setSelected((cur) => (cur === date ? null : date))
+   343→  }
+   344→
+   345→  // ---- F-8c : vue filtrée du panneau du jour (état dérivé, zéro effet) ----
+   346→  const filterMode: DayFilterMode = dayFilter.date === selected ? dayFilter.mode : 'all'
+   347→  const dayAttempts = dayQuery.data?.attempts ?? []
+   348→  const filteredAttempts =
+   349→    filterMode === 'all' ? dayAttempts : dayAttempts.filter((a) => a.mode === filterMode)
+   350→  const modeCounts: Record<Exclude<DayFilterMode, 'all'>, number> = { guided: 0, mission: 0, exam: 0 }
+   351→  for (const a of dayAttempts) {
+   352→    if (a.mode === 'guided' || a.mode === 'mission' || a.mode === 'exam') modeCounts[a.mode]++
+   353→  }
+   354→
+   355→  // ---- F-8d : raccourci local « D » (aujourd'hui) ----
+   356→  // POURQUOI un « d » nu est sûr : les raccourcis GLOBAUX
+   357→  // (keyboard-shortcuts.tsx) sont soit des SÉQUENCES « g » puis lettre
+   358→  // (≤ 900 ms), soit des touches isolées qui ne sont PAS « d » ([ ] / c ?
+   359→  // F1 — aucun Alt+lettre n'existe dans l'app). Un « d » tapé seul ne peut
+   360→  // donc déclencher aucune action globale. Seul cas d'intersection : « d »
+   361→  // comme SECONDE touche d'une séquence « g d » armée — on reflète localement
+   362→  // l'armement (gArmedAtRef) et on laisse alors filer la frappe vers le
+   363→  // gestionnaire global (navigation Tableau de bord) au lieu d'ouvrir le panneau.
+   364→  const handleRootKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+   365→    // Frappe dans un champ de saisie : ce n'est pas un raccourci.
+   366→    const t = e.target as HTMLElement | null
+   367→    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) {
+   368→      return
+   369→    }
+   370→    // Modificateurs ou Maj : ce n'est plus un « d » nu (Ctrl/Cmd+D = favori,
+   371→    // Alt+D… rien à faire ici — on garde la frappe pour le navigateur).
+   372→    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return
+   373→    if (e.key === 'g' || e.key === 'G') {
+   374→      gArmedAtRef.current = Date.now()
+   375→      return
+   376→    }
+   377→    if (e.key !== 'd' && e.key !== 'D') return
+   378→    // Séquence « g d » en cours d'armement : la frappe appartient à la
+   379→    // navigation globale — on ne consomme pas l'événement.
+   380→    if (Date.now() - gArmedAtRef.current < 900) return
+   381→    // Aucune tentative aujourd'hui : rien à ouvrir (le chip reste non cliquable).
+   382→    if (todayN === 0) return
+   383→    e.preventDefault()
+   384→    toggleDay(todayDate)
+   385→  }
+   386→
+   387→  return (
+   388→    <div
+   389→      className="activity-heatmap space-y-3 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary/60"
+   390→      tabIndex={0}
+   391→      role="group"
+   392→      aria-label="Assiduité — tentatives des 12 dernières semaines"
+   393→      onKeyDown={handleRootKeyDown}
+   394→    >
+   395→      {/* Chips de statistiques */}
+   396→      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+   397→        <span className="flex items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1">
+   398→          <Flame className="size-3.5 text-amber-600" aria-hidden />
+   399→          série : <span className="font-medium tabular-nums text-foreground">{streak}</span> jour{streak === 1 ? '' : 's'}
+   400→        </span>
+   401→        {/* F-8d — chip « aujourd'hui » : vrai bouton (toggle du panneau du
+   402→            jour) dès qu'il y a une tentative ; sinon simple span informatif. */}
+   403→        {todayN > 0 ? (
+   404→          <button
+   405→            type="button"
+   406→            onClick={() => toggleDay(todayDate)}
+   407→            aria-label={
+   408→              todayPanelOpen
+   409→                ? `Fermer le détail des ${todayN} tentative${todayN === 1 ? '' : 's'} d’aujourd’hui`
+   410→                : `Voir les ${todayN} tentative${todayN === 1 ? '' : 's'} d’aujourd’hui`
+   411→            }
+   412→            className="flex items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1 transition-colors hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+   413→          >
+   414→            <CheckCircle2 className="size-3.5 text-emerald-600" aria-hidden />
+   415→            aujourd'hui : <span className="font-medium tabular-nums text-foreground">{todayN}</span>
+   416→          </button>
+   417→        ) : (
+   418→          <span
+   419→            className="flex items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1"
+   420→            title="Aucune tentative aujourd'hui"
+   421→            aria-disabled="true"
+   422→          >
+   423→            <CheckCircle2 className="size-3.5 text-emerald-600" aria-hidden />
+   424→            aujourd'hui : <span className="font-medium tabular-nums text-foreground">{todayN}</span>
+   425→          </span>
+   426→        )}
+   427→        <span className="flex items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1">
+   428→          <CalendarCheck className="size-3.5 text-primary" aria-hidden />
+   429→          jours actifs : <span className="font-medium tabular-nums text-foreground">{activeDays}</span>/{cells.length}
+   430→        </span>
+   431→        {/* F-9c — export CSV de l'historique des 84 derniers jours :
+   432→            téléchargement natif silencieux (aucune toast), masqué à l'impression. */}
+   433→        <button
+   434→          type="button"
+   435→          onClick={() => downloadActivityCsv(days)}
+   436→          disabled={days.length === 0}
+   437→          aria-disabled={days.length === 0}
+   438→          title="Exporter l’historique des 84 derniers jours en CSV"
+   439→          aria-label="Exporter l’historique des 84 derniers jours en CSV"
+   440→          className="no-print flex items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1 transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50"
+   441→        >
+   442→          <FileDown className="size-3.5 text-primary" aria-hidden />
+   443→          Exporter CSV
+   444→        </button>
+   445→      </div>
+   446→
+   447→      {/* Heatmap — viewBox compact, largeur bornée, défilement horizontal en dessous du minimum */}
+   448→      <div className="overflow-x-auto">
+   449→        <svg
+   450→          viewBox={`0 0 ${W} ${H}`}
+   451→          className="mx-auto block h-auto w-full min-w-[420px] max-w-[560px]"
+   452→          role="img"
+   453→          aria-label={summary}
+   454→        >
+   455→          {/* Libellés de mois */}
+   456→          {monthLabels.map((m) => (
+   457→            <text
+   458→              key={`mois-${m.col}`}
+   459→              x={GX + m.col * PITCH + CELL / 2}
+   460→              y={10}
+   461→              textAnchor="middle"
+   462→              fontSize={8}
+   463→              className="fill-muted-foreground"
+   464→            >
+   465→              {m.label}
+   466→            </text>
+   467→          ))}
+   468→          {/* Initiales de jours */}
+   469→          {WEEKDAY_ROWS.map((w) => (
+   470→            <text
+   471→              key={`jour-${w.row}`}
+   472→              x={GX - 4}
+   473→              y={GY + w.row * PITCH + CELL / 2 + 2.6}
+   474→              textAnchor="end"
+   475→              fontSize={7.5}
+   476→              className="fill-muted-foreground"
+   477→            >
+   478→              {w.label}
+   479→            </text>
+   480→          ))}
+   481→          {/* Cellules — une par jour ; les journées actives sont cliquables */}
+   482→          {cells.map((cell, i) => {
+   483→            const slot = offset + i
+   484→            const col = Math.floor(slot / 7)
+   485→            const row = slot % 7
+   486→            const x = GX + col * PITCH
+   487→            const y = GY + row * PITCH
+   488→            const level = levelOf(cell.count)
+   489→            const isToday = i === cells.length - 1
+   490→            const isSelected = selected === cell.date
+   491→            const interactive = cell.count > 0
+   492→            return (
+   493→              <g
+   494→                key={cell.date}
+   495→                {...(interactive
+   496→                  ? {
+   497→                      role: 'button',
+   498→                      tabIndex: 0,
+   499→                      'aria-label': `Voir les ${cell.count} tentative${cell.count === 1 ? '' : 's'} du ${fmtFR(cell.date)}`,
+   500→                      onClick: () => toggleDay(cell.date),
+   501→                      onKeyDown: (e: React.KeyboardEvent) => {
+   502→                        if (e.key === 'Enter' || e.key === ' ') {
+   503→                          e.preventDefault()
+   504→                          toggleDay(cell.date)
+   505→                        }
+   506→                      },
+   507→                      style: { cursor: 'pointer' },
+   508→                    }
+   509→                  : {})}
+   510→              >
+   511→                <title>{`${cell.count} tentative${cell.count === 1 ? '' : 's'} le ${fmtFR(cell.date)}${interactive ? ' — cliquer pour le détail' : ''}`}</title>
+   512→                <rect
+   513→                  x={x}
+   514→                  y={y}
+   515→                  width={CELL}
+   516→                  height={CELL}
+   517→                  rx={2}
+   518→                  style={{ fill: LEVEL_FILLS[level] }}
+   519→                  className={interactive ? 'transition-[fill] duration-150' : undefined}
+   520→                />
+   521→                {isSelected ? (
+   522→                  // Anneau de sélection (liseré plein du jour choisi)
+   523→                  <rect
+   524→                    x={x - 1.5}
+   525→                    y={y - 1.5}
+   526→                    width={CELL + 3}
+   527→                    height={CELL + 3}
+   528→                    rx={3.5}
+   529→                    fill="none"
+   530→                    className="stroke-primary"
+   531→                    strokeWidth={1.4}
+   532→                  />
+   533→                ) : isToday ? (
+   534→                  // Liseré discret autour du jour en cours
+   535→                  <rect
+   536→                    x={x - 1}
+   537→                    y={y - 1}
+   538→                    width={CELL + 2}
+   539→                    height={CELL + 2}
+   540→                    rx={3}
+   541→                    fill="none"
+   542→                    className="stroke-primary"
+   543→                    strokeWidth={0.9}
+   544→                  />
+   545→                ) : null}
+   546→              </g>
+   547→            )
+   548→          })}
+   549→        </svg>
+   550→      </div>
+   551→
+   552→      {/* Légende — chaque pastille porte son seuil pédagogique au survol */}
+   553→      <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+   554→        <span className="flex items-center gap-1.5">
+   555→          Moins
+   556→          {LEVEL_FILLS.map((fill, i) => (
+   557→            <span
+   558→              key={i}
+   559→              className="size-2.5 rounded-[2px] ring-1 ring-inset ring-foreground/10 transition-transform hover:scale-125"
+   560→              style={{ backgroundColor: fill }}
+   561→              title={LEVEL_HINTS[i]}
+   562→              aria-hidden
+   563→            />
+   564→          ))}
+   565→          Plus
+   566→        </span>
+   567→        <span>· {cells.length} jours</span>
+   568→        <span aria-hidden>·</span>
+   569→        <span className="flex items-center gap-1">
+   570→          <ChevronRight className="size-3" aria-hidden /> clic sur une journée active : détail
+   571→        </span>
+   572→        <span aria-hidden>·</span>
+   573→        {/* F-8d — le raccourci local « D » (focus dans le composant) ouvre ou referme le panneau du jour */}
+   574→        <span className="flex items-center gap-1">
+   575→          touche <kbd className="rounded border bg-muted px-1 font-mono text-[10px]">D</kbd> : aujourd'hui
+   576→        </span>
+   577→        {/* Lecture textuelle des seuils pour les lecteurs d'écran */}
+   578→        <ul className="sr-only">
+   579→          {LEVEL_HINTS.map((h, i) => (
+   580→            <li key={i}>
+   581→              Niveau {i} — {h}
+   582→            </li>
+   583→          ))}
+   584→        </ul>
+   585→      </div>
+   586→
+   587→      {/* F-9b — comparaison avec la période précédente (84 jours avant la
+   588→          fenêtre courante) : entièrement masquée quand la prop « previous »
+   589→          est absente (payload en cache antérieur — dégradation gracieuse).
+   590→          Le bouton est masqué à l'impression, le panneau ouvert s'imprime. */}
+   591→      {previous ? (
+   592→        <div>
+   593→          <button
+   594→            type="button"
+   595→            onClick={() => setCompareOpen((open) => !open)}
+   596→            aria-expanded={compareOpen}
+   597→            aria-controls={compareOpen ? 'activite-comparaison' : undefined}
+   598→            className="no-print flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+   599→          >
+   600→            <ChevronRight
+   601→              className={`size-3.5 transition-transform duration-150 ${compareOpen ? 'rotate-90' : ''}`}
+   602→              aria-hidden
+   603→            />
+   604→            vs période précédente
+   605→          </button>
+   606→          {compareOpen ? (
+   607→            <div
+   608→              id="activite-comparaison"
+   609→              role="region"
+   610→              aria-label="Comparaison de l’assiduité avec la période précédente (fenêtre courante contre 84 jours précédents)"
+   611→              className="panel-enter rounded-lg border bg-muted/20 p-3 text-xs"
+   612→            >
+   613→              <p className="text-[11px] text-muted-foreground">
+   614→                {cells.length} derniers jours vs {cells.length} jours précédents :
+   615→              </p>
+   616→              <div className="mt-1.5 space-y-1.5">
+   617→                <ComparisonRow label="Tentatives" current={total} previous={previous.total} />
+   618→                <ComparisonRow label="Jours actifs" current={activeDays} previous={previous.activeDays} />
+   619→                {/* Réussites : ligne omise si l'un des deux compteurs est absent
+   620→                    (payload partiel — dégradation gracieuse) */}
+   621→                {typeof passed === 'number' && typeof previous.passed === 'number' ? (
+   622→                  <ComparisonRow label="Réussites" current={passed} previous={previous.passed} />
+   623→                ) : null}
+   624→              </div>
+   625→              <p className={`mt-2 text-[11px] leading-relaxed font-medium ${deltaTone(total - previous.total)}`}>
+   626→                {comparisonTakeaway(total, previous.total)}
+   627→              </p>
+   628→            </div>
+   629→          ) : null}
+   630→        </div>
+   631→      ) : null}
+   632→
+   633→      {/* Détail des tentatives de la journée sélectionnée */}
+   634→      {selected ? (
+   635→        <div
+   636→          role="region"
+   637→          aria-label={`Tentatives du ${fmtFR(selected)}`}
+   638→          className="panel-enter rounded-lg border bg-muted/20 p-3 text-sm"
+   639→        >
+   640→          <div className="flex flex-wrap items-center justify-between gap-2">
+   641→            <p className="font-medium capitalize">
+   642→              {fmtLongFR(selected)}
+   643→              {/* F-8c — compteur reflétant la vue filtrée : « X / Y » dès qu'un
+   644→                  filtre actif restreint la liste (X = filtré, Y = total du jour). */}
+   645→              {dayQuery.data ? (
+   646→                <span className="ml-2 font-normal tabular-nums text-muted-foreground">
+   647→                  {filterMode === 'all' || dayAttempts.length === 0
+   648→                    ? `${dayAttempts.length} tentative${dayAttempts.length === 1 ? '' : 's'}`
+   649→                    : `${filteredAttempts.length} / ${dayAttempts.length} tentative${filteredAttempts.length === 1 ? '' : 's'}`}
+   650→                </span>
+   651→              ) : null}
+   652→            </p>
+   653→            <button
+   654→              type="button"
+   655→              onClick={() => setSelected(null)}
+   656→              className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+   657→              aria-label="Fermer le détail de la journée"
+   658→            >
+   659→              <X className="size-4" />
+   660→            </button>
+   661→          </div>
+   662→          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+   663→            Cliquez sur une tentative pour reprendre l’exercice dans le parcours d’apprentissage.
+   664→          </p>
+   665→          {/* F-8c — chips de filtre par mode : compteur par mode, actif = teal.
+   666→              Masquées pendant le chargement/en erreur ou si le jour est vide. */}
+   667→          {!dayQuery.isPending && !dayQuery.isError && dayAttempts.length > 0 ? (
+   668→            <div
+   669→              className="mt-2 flex flex-wrap items-center gap-1.5"
+   670→              role="group"
+   671→              aria-label="Filtrer les tentatives par mode"
+   672→            >
+   673→              {(['all', 'guided', 'mission', 'exam'] as const).map((m) => {
+   674→                const active = filterMode === m
+   675→                const label = m === 'all' ? 'Tous' : MODE_LABELS[m]
+   676→                const count = m === 'all' ? dayAttempts.length : modeCounts[m]
+   677→                return (
+   678→                  <button
+   679→                    key={m}
+   680→                    type="button"
+   681→                    onClick={() => setDayFilter({ date: selected, mode: m })}
+   682→                    aria-pressed={active}
+   683→                    className={
+   684→                      'rounded-full border px-2 py-0.5 text-[11px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 ' +
+   685→                      (active
+   686→                        ? 'border-primary/40 bg-primary/10 font-medium text-primary'
+   687→                        : 'border-border bg-muted/40 text-muted-foreground hover:border-primary/30 hover:bg-muted hover:text-foreground')
+   688→                    }
+   689→                  >
+   690→                    {label} · <span className="tabular-nums">{count}</span>
+   691→                  </button>
+   692→                )
+   693→              })}
+   694→            </div>
+   695→          ) : null}
+   696→          {dayQuery.isPending ? (
+   697→            <div className="mt-2 space-y-1.5">
+   698→              <Skeleton className="h-8 w-full" />
+   699→              <Skeleton className="h-8 w-5/6" />
+   700→            </div>
+   701→          ) : dayQuery.isError ? (
+   702→            <p className="mt-2 text-xs text-red-700 dark:text-red-400">
+   703→              Impossible de charger les tentatives de cette journée.
+   704→            </p>
+   705→          ) : dayAttempts.length === 0 ? (
+   706→            <p className="mt-2 text-xs text-muted-foreground">Aucune tentative enregistrée ce jour-là.</p>
+   707→          ) : filteredAttempts.length === 0 ? (
+   708→            <p className="mt-2 text-xs text-muted-foreground">
+   709→              Aucune tentative en mode {modeLabel(filterMode)} ce jour-là.
+   710→            </p>
+   711→          ) : (
+   712→            <ul className="mt-2 max-h-56 space-y-1 overflow-y-auto pr-1 print-expand scroll-slim">
+   713→              {filteredAttempts.map((a) => (
+   714→                <li key={a.id}>
+   715→                  <button
+   716→                    type="button"
+   717→                    onClick={() =>
+   718→                      navigate('learning', null, { module: a.moduleCode, exercise: a.exerciseKey })
+   719→                    }
+   720→                    aria-label={`Ouvrir l’exercice ${a.exerciseKey} (${a.moduleCode}) dans le parcours`}
+   721→                    title={`Reprendre l’exercice ${a.exerciseKey} — module ${a.moduleCode}`}
+   722→                    className="group flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-md border bg-background px-2.5 py-1.5 text-left text-xs transition-colors hover:border-primary/40 hover:bg-primary/5"
+   723→                  >
+   724→                    <span className="font-mono text-muted-foreground group-hover:text-primary">{a.exerciseKey}</span>
+   725→                    <span className="text-muted-foreground">{a.moduleCode}</span>
+   726→                    {a.passed ? (
+   727→                      <span className="flex items-center gap-1 font-medium text-emerald-700 dark:text-emerald-400">
+   728→                        <CheckCircle2 className="size-3.5" aria-hidden /> réussi
+   729→                      </span>
+   730→                    ) : (
+   731→                      <span className="font-medium text-amber-700 dark:text-amber-400">à retravailler</span>
+   732→                    )}
+   733→                    <span className="ml-auto flex items-center gap-2 text-muted-foreground">
+   734→                      <span className="uppercase tracking-wide">{modeLabel(a.mode)}</span>
+   735→                      <span className="tabular-nums font-medium text-foreground">{Math.round(a.score * 100)} %</span>
+   736→                      <span className="tabular-nums">{fmtTime(a.attemptedAt)}</span>
+   737→                      <ArrowUpRight
+   738→                        className="size-3.5 text-primary opacity-0 transition-opacity group-hover:opacity-100"
+   739→                        aria-hidden
+   740→                      />
+   741→                    </span>
+   742→                  </button>
+   743→                </li>
+   744→              ))}
+   745→            </ul>
+   746→          )}
+   747→        </div>
+   748→      ) : null}
+   749→    </div>
+   750→  )
+   751→}
+   752→

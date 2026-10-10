@@ -37,6 +37,19 @@ import { useSimulator } from '@/lib/store/simulator-store'
 //   séparateur point-virgule (Excel-FR), constructeur pur
 //   buildActivityCsv() exporté et testable, téléchargement silencieux
 //   via Blob + ancre éphémère (aucun toast).
+// F-10a : export CSV étendu par mode — au clic, UNE requête client
+//   ponctuelle vers /api/attempts?limit=500 (fetch nu dans le
+//   gestionnaire, hors useQuery) alimente le constructeur pur
+//   buildActivityModeCsv() : « Date;Tentatives;Guidé;Mission;Examen »,
+//   agrégation par jour calendaire LOCAL, tentatives hors fenêtre
+//   exclues ; échec réseau/HTTP → repli SILENCIEUX sur le CSV simple
+//   (buildActivityCsv, F-9c).
+// F-10b : barres visuelles du panneau de comparaison — chaque ligne
+//   ComparisonRow porte une paire de mini-barres proportionnelles
+//   (courante = primaire pleine, précédente = grise muted), aria-hidden
+//   + title, légende en pied de panneau ; animation d'ouverture par
+//   keyframe locale (compare-bar-grow) + motion-safe (mouvement réduit
+//   respecté), aucune dépendance, aucun useEffect.
 // ============================================================
 
 export interface ActivityDay {
@@ -196,30 +209,68 @@ function deltaTone(diff: number): string {
 }
 
 /** F-9b — ligne de métrique comparée « libellé : X vs Y (delta) » :
- *  delta +N (emerald), −N (red), = (muted), chiffres tabular-nums. */
+ *  delta +N (emerald), −N (red), = (muted), chiffres tabular-nums.
+ *  F-10b — la ligne porte en outre une paire de mini-barres décoratives
+ *  (aria-hidden : le texte « X vs Y » reste LE contenu accessible) :
+ *  barre pleine (primaire) = période courante, barre grise (muted) =
+ *  période précédente ; largeurs proportionnelles à la valeur rapportée
+ *  au maximum des deux périodes — valeur nulle → remplissage invisible
+ *  (la piste pleine largeur sert de filet), double zéro → pastilles
+ *  minimales de 2 px pour que la paire reste repérable et la mise en
+ *  page stable. Mobile : pleine largeur SOUS les chiffres (aucun
+ *  débordement à 375 px) ; ≥ sm : bloc de 160 px aligné à droite.
+ *  Animation d'ouverture par keyframe locale compare-bar-grow (voir le
+ *  panneau) + variante motion-safe — mouvement réduit → aucune
+ *  animation, largeur finale immédiate. */
 function ComparisonRow({ label, current, previous }: { label: string; current: number; previous: number }) {
   const diff = current - previous
   const delta = diff > 0 ? `+${diff}` : diff < 0 ? `−${-diff}` : '='
+  const max = Math.max(current, previous)
+  const curWidth = max === 0 ? '2px' : `${Math.round((current / max) * 1000) / 10}%`
+  const prevWidth = max === 0 ? '2px' : `${Math.round((previous / max) * 1000) / 10}%`
   return (
-    <p className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="tabular-nums">
-        <span className="font-medium text-foreground">{current}</span>
-        <span className="text-muted-foreground"> vs {previous}</span>
-        <span className={`ml-1.5 font-medium ${deltaTone(diff)}`}>({delta})</span>
-      </span>
-    </p>
+    <div>
+      <p className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="tabular-nums">
+          <span className="font-medium text-foreground">{current}</span>
+          <span className="text-muted-foreground"> vs {previous}</span>
+          <span className={`ml-1.5 font-medium ${deltaTone(diff)}`}>({delta})</span>
+        </span>
+      </p>
+      {/* F-10b — barres jumelles, purement décoratives (title pour la
+          souris, légende textuelle en pied de panneau pour tous) */}
+      <div
+        className="mt-1.5 w-full sm:ml-auto sm:mt-1 sm:w-40"
+        aria-hidden="true"
+        title="Barre pleine : période courante, barre grise : période précédente"
+      >
+        <div className="h-1 w-full overflow-hidden rounded-full bg-primary/15">
+          <div
+            className="h-full rounded-full bg-primary motion-safe:animate-[compare-bar-grow_200ms_ease-out]"
+            style={{ width: curWidth }}
+          />
+        </div>
+        <div className="mt-[3px] h-1 w-full overflow-hidden rounded-full bg-muted-foreground/10">
+          <div
+            className="h-full rounded-full bg-muted-foreground/30 motion-safe:animate-[compare-bar-grow_200ms_ease-out]"
+            style={{ width: prevWidth }}
+          />
+        </div>
+      </div>
+    </div>
   )
 }
 
 // ============================================================
-// F-9c — export CSV de l'historique d'assiduité
+// F-9c / F-10a — export CSV de l'historique d'assiduité
 // ============================================================
 
 /** F-9c — constructeur pur du CSV (testable unitairement) : BOM UTF-8 pour
  *  Excel, séparateur point-virgule (Excel-FR), en-tête « Date;Tentatives »,
  *  une ligne par jour « YYYY-MM-DD;count », ligne de total en fin — fins de
- *  ligne CRLF (RFC 4180). Aucune dépendance, aucun accès DOM. */
+ *  ligne CRLF (RFC 4180). Aucune dépendance, aucun accès DOM. Sert aussi de
+ *  REPLI à l'export enrichi par mode (F-10a) quand l'API est indisponible. */
 export function buildActivityCsv(days: ActivityDay[]): string {
   const lines: string[] = ['Date;Tentatives']
   let total = 0
@@ -231,19 +282,124 @@ export function buildActivityCsv(days: ActivityDay[]): string {
   return `\uFEFF${lines.join('\r\n')}\r\n`
 }
 
-/** F-9c — téléchargement silencieux (Blob + ancre éphémère, aucune toast) :
- *  l'ancre est attachée au document le temps du clic puis retirée, et
- *  l'URL d'objet est révoquée immédiatement après le déclenchement. */
-function downloadActivityCsv(days: ActivityDay[]) {
-  const blob = new Blob([buildActivityCsv(days)], { type: 'text/csv;charset=utf-8' })
+/** F-9c/F-10a — téléchargement silencieux d'un contenu CSV (Blob + ancre
+ *  éphémère, aucun toast) : l'ancre est attachée au document le temps du
+ *  clic puis retirée, et l'URL d'objet est révoquée immédiatement après le
+ *  déclenchement. */
+function downloadCsvText(content: string, filename: string) {
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
-  anchor.download = `assiduite-${days.length}-jours.csv`
+  anchor.download = filename
   document.body.appendChild(anchor)
   anchor.click()
   anchor.remove()
   URL.revokeObjectURL(url)
+}
+
+function downloadActivityCsv(days: ActivityDay[]) {
+  downloadCsvText(buildActivityCsv(days), `assiduite-${days.length}-jours.csv`)
+}
+
+// ============================================================
+// F-10a — export CSV étendu par mode (guidé / mission / examen)
+// ============================================================
+
+/** F-10a — forme minimale d'une tentative pour la répartition par mode :
+ *  l'API /api/attempts renvoie des DayAttempt complets, structurellement
+ *  compatibles (sur-ensemble de cette interface). */
+export interface ActivityModeAttempt {
+  /** Horodatage ISO 8601 de la tentative */
+  attemptedAt: string
+  /** 'guided' | 'mission' | 'exam' — toute autre valeur replie sur « guidé » */
+  mode: string
+}
+
+/** F-10a — clé de jour 'YYYY-MM-DD' en calendrier LOCAL depuis
+ *  l'horodatage d'une tentative : parties de date LOCALES du Date (jamais
+ *  toISOString(), qui basculerait en UTC et décalerait les tentatives de
+ *  fin de journée) — même convention que la grille 84 jours locale du
+ *  composant. Null si l'horodatage est invalide (tentative ignorée). */
+function dayKeyLocal(iso: string): string | null {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${month}-${day}`
+}
+
+/** F-10a — constructeur pur du CSV enrichi (testable unitairement) : même
+ *  squelette que buildActivityCsv (BOM UTF-8, point-virgule Excel-FR, une
+ *  ligne par jour du prop days + ligne de total, CRLF RFC 4180), en-tête
+ *  « Date;Tentatives;Guidé;Mission;Examen ». Les tentatives sont agrégées
+ *  par jour calendaire local (dayKeyLocal) et seules celles tombant DANS
+ *  la fenêtre du prop days comptent (avant days[0] ou après le dernier
+ *  jour → exclues). Mode inconnu → repli « guidé » (même convention que
+ *  modeLabel), de sorte que Guidé + Mission + Examen égale le nombre de
+ *  tentatives agrégées. La colonne « Tentatives » reste l'agrégat du prop
+ *  days (source de vérité du tableau de bord) ; la requête client étant
+ *  plafonnée à 500 tentatives, la répartition par mode s'appuie sur les
+ *  500 plus récentes (limite documentée, sans effet en deçà). */
+export function buildActivityModeCsv(days: ActivityDay[], attempts: ActivityModeAttempt[]): string {
+  const inWindow = new Set(days.map((d) => d.date))
+  const perDay = new Map<string, { guided: number; mission: number; exam: number }>()
+  for (const a of attempts) {
+    if (typeof a?.attemptedAt !== 'string') continue
+    const key = dayKeyLocal(a.attemptedAt)
+    if (key === null || !inWindow.has(key)) continue
+    const bucket = perDay.get(key) ?? { guided: 0, mission: 0, exam: 0 }
+    if (a.mode === 'mission') bucket.mission += 1
+    else if (a.mode === 'exam') bucket.exam += 1
+    else bucket.guided += 1
+    perDay.set(key, bucket)
+  }
+  const lines: string[] = ['Date;Tentatives;Guidé;Mission;Examen']
+  let total = 0
+  let totalGuided = 0
+  let totalMission = 0
+  let totalExam = 0
+  for (const day of days) {
+    const bucket = perDay.get(day.date)
+    const guided = bucket?.guided ?? 0
+    const mission = bucket?.mission ?? 0
+    const exam = bucket?.exam ?? 0
+    lines.push(`${day.date};${day.count};${guided};${mission};${exam}`)
+    total += day.count
+    totalGuided += guided
+    totalMission += mission
+    totalExam += exam
+  }
+  lines.push(`Total;${total};${totalGuided};${totalMission};${totalExam}`)
+  return `\uFEFF${lines.join('\r\n')}\r\n`
+}
+
+/** F-10a — export enrichi : UNE requête client ponctuelle vers
+ *  /api/attempts?limit=500 (fetch nu dans le gestionnaire de clic —
+ *  usage unique, hors useQuery), construction du CSV par mode puis
+ *  téléchargement silencieux. Échec réseau / HTTP non 200 / payload
+ *  inattendu → REPLI SILENCIEUX sur le CSV simple par jour
+ *  (downloadActivityCsv, F-9c) : choix documenté — aucun toast
+ *  (l'utilisateur garde un export utilisable même si l'API est
+ *  momentanément indisponible, comportement silencieux historique). */
+async function downloadActivityModeCsv(days: ActivityDay[]): Promise<void> {
+  let content: string | null = null
+  try {
+    const res = await fetch('/api/attempts?limit=500')
+    if (res.ok) {
+      const data: unknown = await res.json()
+      if (typeof data === 'object' && data !== null && Array.isArray((data as { attempts?: unknown }).attempts)) {
+        content = buildActivityModeCsv(days, (data as { attempts: ActivityModeAttempt[] }).attempts)
+      }
+    }
+  } catch {
+    // Réseau indisponible → repli silencieux ci-dessous (F-9c).
+  }
+  if (content === null) {
+    downloadActivityCsv(days)
+    return
+  }
+  downloadCsvText(content, `assiduite-${days.length}-jours-par-mode.csv`)
 }
 
 // Géométrie du viewBox (le SVG est responsive : w-full borné, h-auto)
@@ -428,15 +584,20 @@ export function ActivityHeatmap({
           <CalendarCheck className="size-3.5 text-primary" aria-hidden />
           jours actifs : <span className="font-medium tabular-nums text-foreground">{activeDays}</span>/{cells.length}
         </span>
-        {/* F-9c — export CSV de l'historique des 84 derniers jours :
-            téléchargement natif silencieux (aucune toast), masqué à l'impression. */}
+        {/* F-9c/F-10a — export CSV de l'historique des 84 derniers jours,
+            enrichi de la répartition par mode (une requête ponctuelle des
+            tentatives au clic, repli silencieux sur l'export simple par jour
+            si l'API échoue) ; téléchargement natif silencieux (aucun toast),
+            masqué à l'impression. */}
         <button
           type="button"
-          onClick={() => downloadActivityCsv(days)}
+          onClick={() => {
+            void downloadActivityModeCsv(days)
+          }}
           disabled={days.length === 0}
           aria-disabled={days.length === 0}
-          title="Exporter l’historique des 84 derniers jours en CSV"
-          aria-label="Exporter l’historique des 84 derniers jours en CSV"
+          title="Exporter l’historique des 84 derniers jours en CSV, avec répartition par mode (guidé / mission / examen)"
+          aria-label="Exporter l’historique des 84 derniers jours en CSV, avec répartition par mode (guidé / mission / examen)"
           className="no-print flex items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1 transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <FileDown className="size-3.5 text-primary" aria-hidden />
@@ -610,6 +771,13 @@ export function ActivityHeatmap({
               aria-label="Comparaison de l’assiduité avec la période précédente (fenêtre courante contre 84 jours précédents)"
               className="panel-enter rounded-lg border bg-muted/20 p-3 text-xs"
             >
+              {/* F-10b — @keyframes locale au composant (globals.css est hors
+                  périmètre) : seul l'état INITIAL (width 0) est défini, la
+                  largeur cible vient du style inline de chaque remplissage.
+                  La garde prefers-reduced-motion est portée par la variante
+                  Tailwind motion-safe: des remplissages (mouvement réduit →
+                  pas d'animation, largeur finale immédiate). */}
+              <style>{'@keyframes compare-bar-grow { from { width: 0 } }'}</style>
               <p className="text-[11px] text-muted-foreground">
                 {cells.length} derniers jours vs {cells.length} jours précédents :
               </p>
@@ -624,6 +792,18 @@ export function ActivityHeatmap({
               </div>
               <p className={`mt-2 text-[11px] leading-relaxed font-medium ${deltaTone(total - previous.total)}`}>
                 {comparisonTakeaway(total, previous.total)}
+              </p>
+              {/* F-10b — légende des deux barres (même style que la légende de
+                  la heatmap : text-[11px], muted, wrap sans débordement) */}
+              <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                <span className="flex items-center gap-1.5">
+                  <span className="h-1 w-3 rounded-full bg-primary" aria-hidden />
+                  barre pleine : période courante
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-1 w-3 rounded-full bg-muted-foreground/30" aria-hidden />
+                  barre grise : période précédente
+                </span>
               </p>
             </div>
           ) : null}

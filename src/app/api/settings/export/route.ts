@@ -1,20 +1,22 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAppState } from '@/lib/server/queries'
+import { PRACTICAL_SHEETS } from '@/lib/data/knowledge'
 
 // ============================================================
 // Export complet de la progression de l'apprenant
 // GET /api/settings/export → { exportedAt, version, data }
 // Contenu : progression, compétences, tentatives, tâches,
 // livrables (contenu + revue), résolutions d'anomalies, appState,
-// profil du stagiaire (nom + poste visé de l'attestation).
+// profil du stagiaire (nom + poste visé de l'attestation) et
+// suivi de lecture des fiches pratiques (id → date ISO).
 // ============================================================
 
 export const EXPORT_VERSION = 1
 
 export async function GET() {
   try {
-    const [progress, competencies, attempts, taskCompletions, deliverables, anomalies, appState, profileSetting] =
+    const [progress, competencies, attempts, taskCompletions, deliverables, anomalies, appState, profileSetting, sheetsSetting] =
       await Promise.all([
         db.progress.findMany({ orderBy: [{ path: 'asc' }, { moduleCode: 'asc' }] }),
         db.competency.findMany({ orderBy: { code: 'asc' } }),
@@ -42,6 +44,7 @@ export async function GET() {
         }),
         getAppState(),
         db.setting.findUnique({ where: { key: 'profile' } }),
+        db.setting.findUnique({ where: { key: 'sheetsRead' } }),
       ])
 
     // Profil du stagiaire : extrait des champs exploitables (jamais le Json brut)
@@ -52,6 +55,18 @@ export async function GET() {
     const profile = {
       learnerName: typeof profileRaw.learnerName === 'string' ? profileRaw.learnerName : null,
       jobTitle: typeof profileRaw.jobTitle === 'string' && profileRaw.jobTitle.trim() ? profileRaw.jobTitle : null,
+    }
+
+    // Suivi de lecture des fiches pratiques : extrait propre (jamais le Json
+    // brut) — uniquement les ids du catalogue, valeurs ISO conservées.
+    const sheetsRaw =
+      sheetsSetting?.value && typeof sheetsSetting.value === 'object' && !Array.isArray(sheetsSetting.value)
+        ? (sheetsSetting.value as Record<string, unknown>)
+        : {}
+    const sheetsRead: Record<string, string> = {}
+    for (const sheet of PRACTICAL_SHEETS) {
+      const iso = sheetsRaw[sheet.id]
+      if (typeof iso === 'string' && iso.length > 0) sheetsRead[sheet.id] = iso
     }
 
     return NextResponse.json({
@@ -107,6 +122,7 @@ export async function GET() {
         })),
         appState,
         profile,
+        sheetsRead,
       },
     })
   } catch (e) {

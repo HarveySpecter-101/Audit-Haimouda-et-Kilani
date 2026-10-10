@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ViewSkeleton, SectionTitle, StatCard, ProgressPct, EmptyState } from '@/components/simulator/shared/ui-bits'
@@ -18,6 +19,7 @@ import type { CompetencyDTO } from '@/lib/types'
 import {
   AlertTriangle,
   Award,
+  BookMarked,
   BookOpenCheck,
   ChevronLeft,
   ChevronRight,
@@ -141,6 +143,26 @@ export default function AssessmentView() {
     },
     refetchOnWindowFocus: false,
   })
+
+  // Suivi de lecture des fiches pratiques — clé ['sheets-read'] PARTAGÉE
+  // avec l'onglet fiches du Centre de connaissances : une seule requête
+  // réseau pour les deux consommateurs (cache mutualisé react-query).
+  const sheetsQuery = useQuery<{
+    read: Record<string, string>
+    stats: { readCount: number; total: number; lastReadAt: string | null }
+  }>({
+    queryKey: ['sheets-read'],
+    queryFn: async () => {
+      const res = await fetch('/api/sheets')
+      if (!res.ok) throw new Error('Erreur')
+      return res.json()
+    },
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  })
+  const sheetsReadCount = sheetsQuery.data?.stats.readCount ?? 0
+  const sheetsTotal = sheetsQuery.data?.stats.total || 12
+  const sheetsReadPct = sheetsTotal > 0 ? (sheetsReadCount / sheetsTotal) * 100 : 0
 
   const competencies = boot.data?.competencies ?? []
   const attempts = attemptsQuery.data?.attempts ?? []
@@ -439,6 +461,37 @@ export default function AssessmentView() {
 
       {/* ---------- Performance par module ---------- */}
       <ModulePerformance attempts={attemptsQuery.data?.attempts} />
+
+      {/* ---------- Fiches pratiques consultées ---------- */}
+      <Card className="print-avoid-break">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <BookMarked className="size-4 text-primary" aria-hidden /> Fiches pratiques consultées
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {sheetsQuery.isPending ? (
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-8 w-20" />
+              <Skeleton className="h-2 min-w-0 flex-1" />
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <span className="tabular-nums text-2xl font-semibold">
+                {sheetsReadCount} / {sheetsTotal}
+              </span>
+              <div className="min-w-0 flex-1">
+                <ProgressPct value={sheetsReadPct} />
+              </div>
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">
+            {sheetsQuery.isError
+              ? 'suivi de lecture momentanément indisponible'
+              : 'consultées au moins une fois dans le Centre de connaissances'}
+          </p>
+        </CardContent>
+      </Card>
 
       {/* ---------- Examens blancs ---------- */}
       <Card>

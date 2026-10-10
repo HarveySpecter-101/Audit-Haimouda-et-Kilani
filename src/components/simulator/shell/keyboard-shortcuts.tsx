@@ -49,6 +49,13 @@ const ACTION_SHORTCUTS: { keys: string; label: string }[] = [
   { keys: '?', label: 'Cette aide' },
 ]
 
+// Raccourcis LOCAUX : actifs uniquement quand le focus se trouve dans le
+// composant concerné (ils ne déclenchent aucune action globale — cf.
+// activity-heatmap.tsx, garde d'armement « g »).
+const CONTEXTUAL_SHORTCUTS: { keys: string; label: string }[] = [
+  { keys: 'D', label: 'Assiduité — ouvrir / refermer le détail d\u2019aujourd\u2019hui (focus dans la heatmap)' },
+]
+
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
   const tag = target.tagName.toLowerCase()
@@ -103,6 +110,19 @@ function ShortcutsHelpDialogContent() {
           <div className="mt-3 rounded-md border bg-muted/40 p-2.5 text-xs leading-relaxed text-muted-foreground">
             <span className="font-medium text-foreground">Astuce :</span> « g » arme la navigation : tapez la lettre
             de la vue dans la seconde qui suit. Exemple : <Kbd>g</Kbd> puis <Kbd>a</Kbd> ouvre la mission d’audit.
+          </div>
+          {/* Raccourcis locaux — complément à deux colonnes sur grand écran */}
+          <div className="mt-3 space-y-1.5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Contextuels</p>
+            {CONTEXTUAL_SHORTCUTS.map((s) => (
+              <div key={s.keys} className="flex items-start justify-between gap-3 text-sm">
+                <span className="text-muted-foreground">{s.label}</span>
+                <Kbd>{s.keys}</Kbd>
+              </div>
+            ))}
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              Les raccourcis contextuels n’agissent que lorsque le focus clavier est dans la zone concernée.
+            </p>
           </div>
         </div>
       </div>

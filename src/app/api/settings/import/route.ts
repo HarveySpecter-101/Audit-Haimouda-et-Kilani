@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { getAppState, upsertAppState } from '@/lib/server/queries'
+import { PRACTICAL_SHEETS } from '@/lib/data/knowledge'
 
 // ============================================================
 // Import d'une sauvegarde des travaux (JSON produit par
@@ -9,7 +10,10 @@ import { getAppState, upsertAppState } from '@/lib/server/queries'
 // tables de progression après validation structurelle.
 // POST {version, data} → {imported: true, details}
 // Le bloc optionnel « profile » (nom + poste visé) restaure
-// l'identité du stagiaire (Setting « profile »).
+// l'identité du stagiaire (Setting « profile »). Le bloc
+// optionnel « sheetsRead » restaure le suivi de lecture des
+// fiches pratiques (Setting « sheetsRead », ids filtrés sur le
+// catalogue — objet vide ignoré).
 // ============================================================
 
 interface ImportProgressRow {
@@ -275,6 +279,27 @@ export async function POST(request: Request) {
             create: { key: 'profile', value: { learnerName: name, jobTitle, updatedAt: new Date().toISOString() } },
           })
           details.profile = true
+        }
+      }
+
+      // ---------- Suivi de lecture des fiches pratiques (optionnel) ----------
+      // Objet id → date ISO ; seuls les ids du catalogue sont restaurés
+      // (les inconnus sont filtrés). Un objet vide (ou entièrement filtré)
+      // est ignoré : il ne remplace pas le suivi local par du vide.
+      if (d.sheetsRead && typeof d.sheetsRead === 'object' && !Array.isArray(d.sheetsRead)) {
+        const incoming = d.sheetsRead as Record<string, unknown>
+        const restored: Record<string, string> = {}
+        for (const sheet of PRACTICAL_SHEETS) {
+          const iso = incoming[sheet.id]
+          if (typeof iso === 'string' && iso.length > 0) restored[sheet.id] = iso
+        }
+        if (Object.keys(restored).length > 0) {
+          await tx.setting.upsert({
+            where: { key: 'sheetsRead' },
+            update: { value: restored as unknown as Prisma.InputJsonValue },
+            create: { key: 'sheetsRead', value: restored as unknown as Prisma.InputJsonValue },
+          })
+          details.sheetsRead = Object.keys(restored).length
         }
       }
     })

@@ -7,14 +7,24 @@ import { SheetsTab } from '@/components/simulator/knowledge/sheets-tab'
 import { ReferencesTab } from '@/components/simulator/knowledge/references-tab'
 import { PcgIfrsTab } from '@/components/simulator/knowledge/pcg-ifrs-tab'
 import { FlashcardsTab } from '@/components/simulator/knowledge/flashcards-tab'
+import { useSimulator } from '@/lib/store/simulator-store'
 import { BookOpen } from 'lucide-react'
 
 // ============================================================
 // CENTRE DE CONNAISSANCES — glossaire, fiches pratiques,
 // références officielles, comparatif PCG/IFRS, flashcards
+// Onglets contrôlés par le store (deep-link depuis la recherche
+// globale : onglet cible + fiche pratique ouverte d'emblée).
 // ============================================================
 
+const TAB_VALUES = ['glossaire', 'fiches', 'references', 'pcg-ifrs', 'flashcards'] as const
+
 export default function KnowledgeView() {
+  const knowledgeTab = useSimulator((s) => s.knowledgeTab)
+  const setKnowledgeTab = useSimulator((s) => s.setKnowledgeTab)
+  // Garde-fou : une valeur inconnue (deep-link erroné) retombe sur le glossaire.
+  const activeTab = (TAB_VALUES as readonly string[]).includes(knowledgeTab) ? knowledgeTab : 'glossaire'
+
   return (
     <div className="space-y-6">
       <SectionTitle sub="Glossaire métier, fiches pratiques illustrées, références officielles, comparatif PCG/IFRS et flashcards de révision active — ressources consultables à tout moment.">
@@ -23,7 +33,7 @@ export default function KnowledgeView() {
         </span>
       </SectionTitle>
 
-      <Tabs defaultValue="glossaire" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setKnowledgeTab} className="space-y-4">
         <TabsList className="w-full flex-wrap sm:w-auto">
           <TabsTrigger value="glossaire">Glossaire</TabsTrigger>
           <TabsTrigger value="fiches">Fiches pratiques</TabsTrigger>

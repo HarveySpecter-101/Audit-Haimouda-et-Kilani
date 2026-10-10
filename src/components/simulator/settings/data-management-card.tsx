@@ -58,7 +58,7 @@ export function DataManagementCard() {
   const [resetWord, setResetWord] = useState('')
 
   const invalidateAll = () => {
-    for (const key of ['bootstrap', 'dashboard', 'documents', 'anomalies', 'calendar', 'calendar-view', 'deliverables', 'assessment-attempts', 'assessment-bootstrap', 'client-space-bootstrap', 'assessment-exams-A', 'assessment-exams-B', 'assessment-deliverables', 'documents-anomalies', 'deliverables-stats', 'achievements']) {
+    for (const key of ['bootstrap', 'dashboard', 'documents', 'anomalies', 'calendar', 'calendar-view', 'deliverables', 'assessment-attempts', 'assessment-bootstrap', 'client-space-bootstrap', 'assessment-exams-A', 'assessment-exams-B', 'assessment-deliverables', 'documents-anomalies', 'deliverables-stats', 'achievements', 'sheets-read']) {
       queryClient.invalidateQueries({ queryKey: [key] })
     }
     // Les données de progression ont changé : les réussites aussi.
@@ -121,9 +121,12 @@ export function DataManagementCard() {
     },
     onSuccess: (json) => {
       const d = json.details ?? {}
+      // Le segment « fiches lues » n'apparaît que si la sauvegarde
+      // restaurait bien un suivi de lecture (bloc sheetsRead).
+      const sheetsSegment = 'sheetsRead' in d ? ` · fiches lues : ${d.sheetsRead}` : ''
       toast({
         title: 'Travaux importés',
-        description: `Progression : ${d.progress ?? 0} · compétences : ${d.competencies ?? 0} · tentatives : ${d.exerciseAttempts ?? 0} · livrables : ${d.deliverables ?? 0}.`,
+        description: `Progression : ${d.progress ?? 0} · compétences : ${d.competencies ?? 0} · tentatives : ${d.exerciseAttempts ?? 0} · livrables : ${d.deliverables ?? 0}${sheetsSegment}.`,
       })
       invalidateAll()
       setPendingImport(null)
@@ -227,8 +230,9 @@ export function DataManagementCard() {
             <p className="text-sm font-medium">Exporter mes travaux</p>
             <p className="text-xs leading-relaxed text-muted-foreground">
               Génère un fichier JSON complet : progression des modules, compétences, tentatives d’exercices,
-              tâches terminées, contenus des livrables, résolutions d’anomalies, paramètres et profil du
-              stagiaire (nom + poste visé de l’attestation).
+              tâches terminées, contenus des livrables, résolutions d’anomalies, paramètres, profil du
+              stagiaire (nom + poste visé de l’attestation) et suivi de lecture des fiches pratiques du
+              Centre de connaissances.
             </p>
             <Button variant="outline" size="sm" className="gap-1.5" onClick={doExport}>
               <Download className="size-3.5" /> Exporter (JSON)

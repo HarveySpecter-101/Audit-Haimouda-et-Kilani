@@ -1,0 +1,648 @@
+     1→'use client'
+     2→
+     3→import { useEffect, useMemo, useState } from 'react'
+     4→import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+     5→import { Badge } from '@/components/ui/badge'
+     6→import { Button } from '@/components/ui/button'
+     7→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+     8→import {
+     9→  Dialog,
+    10→  DialogContent,
+    11→  DialogDescription,
+    12→  DialogFooter,
+    13→  DialogHeader,
+    14→  DialogTitle,
+    15→} from '@/components/ui/dialog'
+    16→import { Progress } from '@/components/ui/progress'
+    17→import { Skeleton } from '@/components/ui/skeleton'
+    18→import { StatCard } from '@/components/simulator/shared/ui-bits'
+    19→import { useToast } from '@/hooks/use-toast'
+    20→import {
+    21→  FLASHCARD_DECKS,
+    22→  FLASHCARDS,
+    23→  type Flashcard,
+    24→  type FlashcardDeckId,
+    25→} from '@/lib/data/flashcards'
+    26→import {
+    27→  BookOpen,
+    28→  Check,
+    29→  GraduationCap,
+    30→  Layers,
+    31→  ListChecks,
+    32→  RefreshCw,
+    33→  Receipt,
+    34→  RotateCcw,
+    35→  ShieldCheck,
+    36→  Sparkles,
+    37→  Target,
+    38→} from 'lucide-react'
+    39→import type { LucideIcon } from 'lucide-react'
+    40→
+    41→// ============================================================
+    42→// FLASHCARDS — révision active (rappel actif)
+    43→// Écran 1 : choix du paquet + progression persistée
+    44→// Écran 2 : session (carte retournable + auto-évaluation)
+    45→// Écran 3 : bilan de session
+    46→// ============================================================
+    47→
+    48→interface FlashcardsProgress {
+    49→  known: Record<string, string>
+    50→  review: Record<string, string>
+    51→  stats: { sessions: number; cardsSeen: number }
+    52→}
+    53→
+    54→interface FlashcardsPayload {
+    55→  decks: { id: FlashcardDeckId; label: string; cardCount: number }[]
+    56→  progress: FlashcardsProgress
+    57→}
+    58→
+    59→const EMPTY_PROGRESS: FlashcardsProgress = {
+    60→  known: {},
+    61→  review: {},
+    62→  stats: { sessions: 0, cardsSeen: 0 },
+    63→}
+    64→
+    65→type SessionSource = { type: 'deck'; deckId: FlashcardDeckId } | { type: 'targeted' }
+    66→
+    67→interface SessionState {
+    68→  source: SessionSource
+    69→  title: string
+    70→  cards: Flashcard[]
+    71→  index: number
+    72→  flipped: boolean
+    73→  seen: number
+    74→  knownCount: number
+    75→  reviewCount: number
+    76→}
+    77→
+    78→const DECK_ICONS: Record<string, LucideIcon> = {
+    79→  BookOpen,
+    80→  Receipt,
+    81→  ShieldCheck,
+    82→  Layers,
+    83→}
+    84→
+    85→const DECK_ACCENTS: Record<FlashcardDeckId, { badge: string; border: string; icon: string }> = {
+    86→  COMPTA: {
+    87→    badge: 'bg-teal-50 text-teal-800 border-teal-300 dark:bg-teal-950 dark:text-teal-300 dark:border-teal-800',
+    88→    border: 'border-teal-200 dark:border-teal-900',
+    89→    icon: 'text-teal-700 dark:text-teal-300',
+    90→  },
+    91→  FISCAL: {
+    92→    badge: 'bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800',
+    93→    border: 'border-amber-200 dark:border-amber-900',
+    94→    icon: 'text-amber-700 dark:text-amber-300',
+    95→  },
+    96→  AUDIT: {
+    97→    badge: 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600',
+    98→    border: 'border-slate-200 dark:border-slate-700',
+    99→    icon: 'text-slate-700 dark:text-slate-300',
+   100→  },
+   101→  PCG: {
+   102→    badge:
+   103→      'bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800',
+   104→    border: 'border-emerald-200 dark:border-emerald-900',
+   105→    icon: 'text-emerald-700 dark:text-emerald-300',
+   106→  },
+   107→}
+   108→
+   109→function shuffle<T>(items: T[]): T[] {
+   110→  const arr = [...items]
+   111→  for (let i = arr.length - 1; i > 0; i--) {
+   112→    const j = Math.floor(Math.random() * (i + 1))
+   113→    ;[arr[i], arr[j]] = [arr[j], arr[i]]
+   114→  }
+   115→  return arr
+   116→}
+   117→
+   118→/** File de session : cartes « à revoir » en premier, puis non vues, puis maîtrisées. */
+   119→function buildQueue(cards: Flashcard[], progress: FlashcardsProgress): Flashcard[] {
+   120→  const toReview = shuffle(cards.filter((c) => progress.review[c.id]))
+   121→  const unseen = shuffle(cards.filter((c) => !progress.review[c.id] && !progress.known[c.id]))
+   122→  const known = shuffle(cards.filter((c) => progress.known[c.id]))
+   123→  return [...toReview, ...unseen, ...known]
+   124→}
+   125→
+   126→export function FlashcardsTab() {
+   127→  const { toast } = useToast()
+   128→  const queryClient = useQueryClient()
+   129→  const [screen, setScreen] = useState<'select' | 'session' | 'end'>('select')
+   130→  const [session, setSession] = useState<SessionState | null>(null)
+   131→  const [resetOpen, setResetOpen] = useState(false)
+   132→
+   133→  // ---------- Progression serveur ----------
+   134→  const {
+   135→    data,
+   136→    isLoading,
+   137→    isError,
+   138→    refetch,
+   139→  } = useQuery({
+   140→    queryKey: ['flashcards'],
+   141→    queryFn: async (): Promise<FlashcardsPayload> => {
+   142→      const res = await fetch('/api/flashcards')
+   143→      const json = (await res.json().catch(() => null)) as FlashcardsPayload | { error?: string } | null
+   144→      if (!res.ok || !json || !('progress' in json)) {
+   145→        throw new Error((json as { error?: string } | null)?.error ?? 'Progression indisponible.')
+   146→      }
+   147→      return json as FlashcardsPayload
+   148→    },
+   149→  })
+   150→
+   151→  const progress: FlashcardsProgress = data?.progress ?? EMPTY_PROGRESS
+   152→
+   153→  // ---------- Auto-évaluation ----------
+   154→  const answerMutation = useMutation({
+   155→    mutationFn: async (payload: { cardId: string; result: 'KNOWN' | 'REVIEW'; newSession?: boolean }) => {
+   156→      const res = await fetch('/api/flashcards', {
+   157→        method: 'POST',
+   158→        headers: { 'Content-Type': 'application/json' },
+   159→        body: JSON.stringify(payload),
+   160→      })
+   161→      const json = (await res.json().catch(() => null)) as
+   162→        | { ok?: boolean; progress?: FlashcardsProgress; error?: string }
+   163→        | null
+   164→      if (!res.ok || !json?.ok) {
+   165→        throw new Error(json?.error ?? 'Le serveur a refusé l’enregistrement.')
+   166→      }
+   167→      return json
+   168→    },
+   169→    onSuccess: (json) => {
+   170→      if (json.progress) {
+   171→        queryClient.setQueryData<FlashcardsPayload>(['flashcards'], (old) =>
+   172→          old ? { ...old, progress: json.progress as FlashcardsProgress } : old,
+   173→        )
+   174→      }
+   175→    },
+   176→    onError: (e: Error) => {
+   177→      toast({
+   178→        title: 'Synchronisation impossible',
+   179→        description: `${e.message} La session continue localement.`,
+   180→        variant: 'destructive',
+   181→      })
+   182→    },
+   183→  })
+   184→  const { mutate: submitAnswer, isPending: answerPending } = answerMutation
+   185→
+   186→  // ---------- Réinitialisation ----------
+   187→  const resetMutation = useMutation({
+   188→    mutationFn: async () => {
+   189→      const res = await fetch('/api/flashcards', {
+   190→        method: 'POST',
+   191→        headers: { 'Content-Type': 'application/json' },
+   192→        body: JSON.stringify({ action: 'reset' }),
+   193→      })
+   194→      const json = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null
+   195→      if (!res.ok || !json?.ok) throw new Error(json?.error ?? 'Réinitialisation refusée.')
+   196→      return json
+   197→    },
+   198→    onSuccess: () => {
+   199→      queryClient.invalidateQueries({ queryKey: ['flashcards'] })
+   200→      setResetOpen(false)
+   201→      setScreen('select')
+   202→      setSession(null)
+   203→      toast({
+   204→        title: 'Progression réinitialisée',
+   205→        description: 'Toutes les cartes repassent en « non vues » — sessions et maîtrises remises à zéro.',
+   206→      })
+   207→    },
+   208→    onError: (e: Error) => {
+   209→      toast({ title: 'Échec de la réinitialisation', description: e.message, variant: 'destructive' })
+   210→    },
+   211→  })
+   212→
+   213→  // ---------- Statistiques dérivées ----------
+   214→  const deckStats = useMemo(() => {
+   215→    const map: Record<FlashcardDeckId, { total: number; known: number; review: number }> = {
+   216→      COMPTA: { total: 0, known: 0, review: 0 },
+   217→      FISCAL: { total: 0, known: 0, review: 0 },
+   218→      AUDIT: { total: 0, known: 0, review: 0 },
+   219→      PCG: { total: 0, known: 0, review: 0 },
+   220→    }
+   221→    for (const card of FLASHCARDS) {
+   222→      map[card.deck].total += 1
+   223→      if (progress.known[card.id]) map[card.deck].known += 1
+   224→      else if (progress.review[card.id]) map[card.deck].review += 1
+   225→    }
+   226→    return map
+   227→  }, [progress])
+   228→
+   229→  const targetedCards = useMemo(() => FLASHCARDS.filter((c) => progress.review[c.id]), [progress])
+   230→  const knownTotal = useMemo(
+   231→    () => FLASHCARDS.filter((c) => progress.known[c.id]).length,
+   232→    [progress],
+   233→  )
+   234→  const globalMastery = FLASHCARDS.length > 0 ? Math.round((knownTotal / FLASHCARDS.length) * 100) : 0
+   235→
+   236→  // ---------- Contrôle de session ----------
+   237→  const startSession = (source: SessionSource) => {
+   238→    let cards: Flashcard[]
+   239→    let title: string
+   240→    if (source.type === 'deck') {
+   241→      cards = buildQueue(FLASHCARDS.filter((c) => c.deck === source.deckId), progress)
+   242→      title = FLASHCARD_DECKS.find((d) => d.id === source.deckId)?.label ?? 'Révision'
+   243→    } else {
+   244→      cards = buildQueue(FLASHCARDS.filter((c) => progress.review[c.id]), progress)
+   245→      title = 'Révision ciblée — cartes à revoir'
+   246→    }
+   247→    if (cards.length === 0) return
+   248→    setSession({ source, title, cards, index: 0, flipped: false, seen: 0, knownCount: 0, reviewCount: 0 })
+   249→    setScreen('session')
+   250→  }
+   251→
+   252→  const toggleFlip = () => {
+   253→    setSession((s) => (s ? { ...s, flipped: !s.flipped } : s))
+   254→  }
+   255→
+   256→  const handleAnswer = (result: 'KNOWN' | 'REVIEW') => {
+   257→    if (!session || answerPending) return
+   258→    const card = session.cards[session.index]
+   259→    // La première carte répondue d'une session ouvre une nouvelle session côté stats.
+   260→    submitAnswer({ cardId: card.id, result, newSession: session.seen === 0 })
+   261→    const seen = session.seen + 1
+   262→    const knownCount = session.knownCount + (result === 'KNOWN' ? 1 : 0)
+   263→    const reviewCount = session.reviewCount + (result === 'REVIEW' ? 1 : 0)
+   264→    if (session.index + 1 >= session.cards.length) {
+   265→      setSession({ ...session, seen, knownCount, reviewCount })
+   266→      setScreen('end')
+   267→    } else {
+   268→      setSession({ ...session, index: session.index + 1, flipped: false, seen, knownCount, reviewCount })
+   269→    }
+   270→  }
+   271→
+   272→  // ---------- Raccourcis clavier : 1 / 2 une fois la carte retournée ----------
+   273→  useEffect(() => {
+   274→    if (screen !== 'session' || !session) return
+   275→    function onKey(e: KeyboardEvent) {
+   276→      const target = e.target as HTMLElement | null
+   277→      if (
+   278→        target &&
+   279→        (target.tagName === 'INPUT' ||
+   280→          target.tagName === 'TEXTAREA' ||
+   281→          target.tagName === 'SELECT' ||
+   282→          target.isContentEditable)
+   283→      ) {
+   284→        return
+   285→      }
+   286→      if (e.key !== '1' && e.key !== '2') return
+   287→      if (!session || !session.flipped) return
+   288→      e.preventDefault()
+   289→      handleAnswer(e.key === '1' ? 'KNOWN' : 'REVIEW')
+   290→    }
+   291→    window.addEventListener('keydown', onKey)
+   292→    return () => window.removeEventListener('keydown', onKey)
+   293→  }, [screen, session, answerPending, submitAnswer])
+   294→
+   295→  // ============================================================
+   296→  // RENDU
+   297→  // ============================================================
+   298→
+   299→  if (isLoading) {
+   300→    return (
+   301→      <div className="space-y-4">
+   302→        <div className="grid grid-cols-3 gap-3">
+   303→          <Skeleton className="h-24" />
+   304→          <Skeleton className="h-24" />
+   305→          <Skeleton className="h-24" />
+   306→        </div>
+   307→        <div className="grid gap-4 md:grid-cols-2">
+   308→          <Skeleton className="h-52" />
+   309→          <Skeleton className="h-52" />
+   310→          <Skeleton className="h-52" />
+   311→          <Skeleton className="h-52" />
+   312→        </div>
+   313→      </div>
+   314→    )
+   315→  }
+   316→
+   317→  if (isError) {
+   318→    return (
+   319→      <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed p-10 text-center">
+   320→        <p className="font-medium">Progression indisponible</p>
+   321→        <p className="max-w-md text-sm text-muted-foreground">
+   322→          Le serveur n’a pas répondu. Vos cartes restent consultables dès que la connexion est rétablie.
+   323→        </p>
+   324→        <Button variant="outline" className="gap-1.5" onClick={() => void refetch()}>
+   325→          <RefreshCw className="size-4" /> Réessayer
+   326→        </Button>
+   327→      </div>
+   328→    )
+   329→  }
+   330→
+   331→  // ---------- Écran : bilan de session ----------
+   332→  if (screen === 'end' && session) {
+   333→    const successRate = session.seen > 0 ? Math.round((session.knownCount / session.seen) * 100) : 0
+   334→    const stats: { label: string; value: string; className: string }[] = [
+   335→      { label: 'Cartes vues', value: String(session.seen), className: 'text-foreground' },
+   336→      { label: 'Maîtrisées', value: String(session.knownCount), className: 'text-emerald-700 dark:text-emerald-400' },
+   337→      { label: 'À revoir', value: String(session.reviewCount), className: 'text-amber-700 dark:text-amber-400' },
+   338→      { label: 'Réussite', value: `${successRate} %`, className: 'text-foreground' },
+   339→    ]
+   340→    return (
+   341→      <div className="mx-auto max-w-2xl space-y-6">
+   342→        <div className="flex flex-col items-center gap-2 text-center">
+   343→          <div className="rounded-full bg-emerald-100 p-3 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+   344→            <Check className="size-6" aria-hidden />
+   345→          </div>
+   346→          <h3 className="text-lg font-semibold">Session terminée</h3>
+   347→          <p className="text-sm text-muted-foreground">{session.title}</p>
+   348→        </div>
+   349→
+   350→        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+   351→          {stats.map((s) => (
+   352→            <div key={s.label} className="rounded-lg border bg-card p-3 text-center">
+   353→              <p className={`tabular-nums text-xl font-semibold ${s.className}`}>{s.value}</p>
+   354→              <p className="mt-0.5 text-xs text-muted-foreground">{s.label}</p>
+   355→            </div>
+   356→          ))}
+   357→        </div>
+   358→
+   359→        <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
+   360→          <Button className="gap-1.5" onClick={() => startSession(session.source)}>
+   361→            <RefreshCw className="size-4" /> Recommencer
+   362→          </Button>
+   363→          <Button variant="outline" className="gap-1.5" onClick={() => setScreen('select')}>
+   364→            <Layers className="size-4" /> Changer de paquet
+   365→          </Button>
+   366→        </div>
+   367→
+   368→        <p className="mx-auto flex max-w-lg items-start gap-2 rounded-lg border bg-muted/40 p-3 text-left text-xs leading-relaxed text-muted-foreground">
+   369→          <Sparkles className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+   370→          La mémorisation active est plus efficace que la relecture : revenez sur les cartes « à revoir » dans quelques
+   371→          jours.
+   372→        </p>
+   373→      </div>
+   374→    )
+   375→  }
+   376→
+   377→  // ---------- Écran : session en cours ----------
+   378→  if (screen === 'session' && session) {
+   379→    const card = session.cards[session.index]
+   380→    const accent = DECK_ACCENTS[card.deck]
+   381→    const deckLabel = FLASHCARD_DECKS.find((d) => d.id === card.deck)?.label ?? card.deck
+   382→    const cardProgressPct = Math.round(((session.index + 1) / session.cards.length) * 100)
+   383→    const wasKnown = Boolean(progress.known[card.id])
+   384→    const wasReview = Boolean(progress.review[card.id])
+   385→
+   386→    return (
+   387→      <div className="mx-auto max-w-2xl space-y-5">
+   388→        <div className="space-y-2">
+   389→          <div className="flex items-center justify-between gap-2 text-sm">
+   390→            <span className="font-medium">{session.title}</span>
+   391→            <span className="tabular-nums text-muted-foreground">
+   392→              Carte {session.index + 1} / {session.cards.length}
+   393→            </span>
+   394→          </div>
+   395→          <Progress value={cardProgressPct} aria-label={`Progression de la session : ${cardProgressPct} %`} />
+   396→          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+   397→            <span className="inline-flex items-center gap-1">
+   398→              <Check className="size-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden />
+   399→              Maîtrisées (session) : {session.knownCount}
+   400→            </span>
+   401→            <span className="inline-flex items-center gap-1">
+   402→              <RotateCcw className="size-3.5 text-amber-600 dark:text-amber-400" aria-hidden />
+   403→              À revoir (session) : {session.reviewCount}
+   404→            </span>
+   405→            <span>Restantes : {session.cards.length - session.seen}</span>
+   406→          </div>
+   407→        </div>
+   408→
+   409→        {/* Carte retournable */}
+   410→        <div key={card.id} style={{ animation: 'view-enter 0.25s ease-out' }}>
+   411→          <div
+   412→            className="flip-card w-full cursor-pointer select-none focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 rounded-xl"
+   413→            role="button"
+   414→            tabIndex={0}
+   415→            aria-pressed={session.flipped}
+   416→            aria-label="Retourner la flashcard"
+   417→            onClick={toggleFlip}
+   418→            onKeyDown={(e) => {
+   419→              if (e.key === 'Enter' || e.key === ' ') {
+   420→                e.preventDefault()
+   421→                toggleFlip()
+   422→              }
+   423→            }}
+   424→          >
+   425→            <div className={`flip-inner h-64 sm:h-72 ${session.flipped ? 'is-flipped' : ''}`}>
+   426→              {/* Recto : question */}
+   427→              <div
+   428→                className={`flip-face flex h-full w-full flex-col items-center justify-center gap-4 rounded-xl border bg-card p-6 text-center shadow-sm ${accent.border}`}
+   429→              >
+   430→                <span
+   431→                  className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${accent.badge}`}
+   432→                >
+   433→                  {deckLabel}
+   434→                </span>
+   435→                <p className="text-base font-medium leading-relaxed sm:text-lg">{card.front}</p>
+   436→                {wasKnown || wasReview ? (
+   437→                  <span
+   438→                    className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium ${
+   439→                      wasKnown
+   440→                        ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+   441→                        : 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300'
+   442→                    }`}
+   443→                  >
+   444→                    {wasKnown ? <Check className="size-3" aria-hidden /> : <RotateCcw className="size-3" aria-hidden />}
+   445→                    {wasKnown ? 'Carte déjà maîtrisée' : 'Marquée à revoir'}
+   446→                  </span>
+   447→                ) : null}
+   448→              </div>
+   449→              {/* Verso : réponse */}
+   450→              <div
+   451→                className={`flip-face flip-face-back flex h-full w-full flex-col rounded-xl border bg-card p-6 shadow-sm ${accent.border}`}
+   452→              >
+   453→                <span
+   454→                  className={`self-center inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${accent.badge}`}
+   455→                >
+   456→                  Réponse
+   457→                </span>
+   458→                <div className="mt-3 flex-1 overflow-y-auto">
+   459→                  <p className="text-left text-sm leading-relaxed sm:text-base">{card.back}</p>
+   460→                </div>
+   461→              </div>
+   462→            </div>
+   463→          </div>
+   464→        </div>
+   465→
+   466→        {/* Contrôles */}
+   467→        <div className="space-y-3">
+   468→          {!session.flipped ? (
+   469→            <div className="space-y-2">
+   470→              <Button size="lg" className="w-full gap-1.5" onClick={toggleFlip}>
+   471→                <RotateCcw className="size-4" aria-hidden /> Retourner la carte
+   472→              </Button>
+   473→              <p className="text-center text-xs text-muted-foreground">
+   474→                Cliquez sur la carte, ou utilisez la touche Espace / Entrée — évaluez-vous ensuite honnêtement.
+   475→              </p>
+   476→            </div>
+   477→          ) : (
+   478→            <div className="flex flex-col gap-2 sm:flex-row">
+   479→              <Button
+   480→                size="lg"
+   481→                className="flex-1 gap-1.5 bg-emerald-600 text-white shadow-xs hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600"
+   482→                onClick={() => handleAnswer('KNOWN')}
+   483→                disabled={answerPending}
+   484→              >
+   485→                <Check className="size-4" aria-hidden /> Je maîtrisais
+   486→                <kbd className="rounded border border-white/30 bg-white/10 px-1 font-mono text-[10px]">1</kbd>
+   487→              </Button>
+   488→              <Button
+   489→                size="lg"
+   490→                className="flex-1 gap-1.5 bg-amber-500 text-amber-950 shadow-xs hover:bg-amber-400 dark:bg-amber-600 dark:text-amber-50 dark:hover:bg-amber-500"
+   491→                onClick={() => handleAnswer('REVIEW')}
+   492→                disabled={answerPending}
+   493→              >
+   494→                <RotateCcw className="size-4" aria-hidden /> À revoir
+   495→                <kbd className="rounded border border-black/20 bg-black/5 px-1 font-mono text-[10px] dark:border-white/30 dark:bg-white/10 dark:text-amber-50">2</kbd>
+   496→              </Button>
+   497→            </div>
+   498→          )}
+   499→          <Button
+   500→            variant="ghost"
+   501→            size="sm"
+   502→            className="mx-auto block"
+   503→            onClick={() => {
+   504→              setSession(null)
+   505→              setScreen('select')
+   506→            }}
+   507→          >
+   508→            Interrompre et revenir aux paquets
+   509→          </Button>
+   510→        </div>
+   511→      </div>
+   512→    )
+   513→  }
+   514→
+   515→  // ---------- Écran : sélection du paquet ----------
+   516→  return (
+   517→    <div className="space-y-6">
+   518→      <div className="flex flex-col gap-3 rounded-lg border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+   519→        <div className="flex items-start gap-3">
+   520→          <div className="rounded-md bg-primary/10 p-2 text-primary">
+   521→            <Sparkles className="size-5" aria-hidden />
+   522→          </div>
+   523→          <div className="space-y-1">
+   524→            <p className="text-sm font-medium">Révision active par flashcards</p>
+   525→            <p className="max-w-xl text-xs leading-relaxed text-muted-foreground">
+   526→              Retournez chaque carte puis évaluez-vous honnêtement : la mémorisation active ancre les notions bien plus
+   527→              durablement que la relecture. Les cartes marquées « à revoir » remontent en priorité dans vos prochaines
+   528→              sessions.
+   529→            </p>
+   530→          </div>
+   531→        </div>
+   532→        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setResetOpen(true)}>
+   533→          <RefreshCw className="size-3.5" aria-hidden /> Réinitialiser ma progression
+   534→        </Button>
+   535→      </div>
+   536→
+   537→      <div className="grid grid-cols-3 gap-3">
+   538→        <StatCard
+   539→          title="Sessions"
+   540→          value={String(progress.stats.sessions)}
+   541→          icon={<GraduationCap className="size-4 text-primary" aria-hidden />}
+   542→        />
+   543→        <StatCard
+   544→          title="Cartes travaillées"
+   545→          value={String(progress.stats.cardsSeen)}
+   546→          icon={<ListChecks className="size-4 text-primary" aria-hidden />}
+   547→        />
+   548→        <StatCard
+   549→          title="Maîtrise globale"
+   550→          value={`${globalMastery} %`}
+   551→          tone="positive"
+   552→          hint={`${knownTotal} / ${FLASHCARDS.length} cartes`}
+   553→          icon={<Check className="size-4 text-primary" aria-hidden />}
+   554→        />
+   555→      </div>
+   556→
+   557→      <div className="stagger grid gap-4 md:grid-cols-2">
+   558→        {FLASHCARD_DECKS.map((deck) => {
+   559→          const stats = deckStats[deck.id]
+   560→          const pct = stats.total > 0 ? Math.round((stats.known / stats.total) * 100) : 0
+   561→          const Icon = DECK_ICONS[deck.icon] ?? Layers
+   562→          return (
+   563→            <Card key={deck.id} className="flex flex-col">
+   564→              <CardHeader>
+   565→                <div className="flex items-center justify-between gap-2">
+   566→                  <div className="flex items-center gap-2">
+   567→                    <Icon className={`size-5 ${DECK_ACCENTS[deck.id].icon}`} aria-hidden />
+   568→                    <CardTitle className="text-base">{deck.label}</CardTitle>
+   569→                  </div>
+   570→                  <Badge variant="outline">{stats.total} cartes</Badge>
+   571→                </div>
+   572→              </CardHeader>
+   573→              <CardContent className="mt-auto space-y-4">
+   574→                <p className="text-sm leading-relaxed text-muted-foreground">{deck.description}</p>
+   575→                <div className="space-y-1.5">
+   576→                  <div className="flex items-center justify-between text-xs">
+   577→                    <span className="text-muted-foreground">Maîtrise du paquet</span>
+   578→                    <span className="font-medium tabular-nums">{pct} %</span>
+   579→                  </div>
+   580→                  <Progress value={pct} aria-label={`Maîtrise du paquet ${deck.label} : ${pct} %`} />
+   581→                  <p className="text-xs text-muted-foreground">
+   582→                    {stats.known} maîtrisée{stats.known > 1 ? 's' : ''} · {stats.review} à revoir ·{' '}
+   583→                    {stats.total - stats.known - stats.review} non vue{stats.total - stats.known - stats.review > 1 ? 's' : ''}
+   584→                  </p>
+   585→                </div>
+   586→                <Button className="w-full gap-1.5 sm:w-auto" onClick={() => startSession({ type: 'deck', deckId: deck.id })}>
+   587→                  <GraduationCap className="size-4" aria-hidden /> Réviser ce paquet
+   588→                </Button>
+   589→              </CardContent>
+   590→            </Card>
+   591→          )
+   592→        })}
+   593→      </div>
+   594→
+   595→      <Card className="border-amber-300/70 dark:border-amber-800/70">
+   596→        <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+   597→          <div className="flex items-start gap-3">
+   598→            <Target className="mt-0.5 size-5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
+   599→            <div className="space-y-1">
+   600→              <p className="text-sm font-medium">Révision ciblée : cartes à revoir</p>
+   601→              <p className="max-w-xl text-xs leading-relaxed text-muted-foreground">
+   602→                {targetedCards.length > 0
+   603→                  ? `${targetedCards.length} carte${targetedCards.length > 1 ? 's' : ''} marquée${targetedCards.length > 1 ? 's' : ''} « à revoir » dans tous les paquets — la file prioritaire de votre prochaine session.`
+   604→                  : 'Aucune carte marquée « à revoir » pour l’instant — elles apparaîtront ici dès votre première session.'}
+   605→              </p>
+   606→            </div>
+   607→          </div>
+   608→          <Button
+   609→            variant="outline"
+   610→            className="gap-1.5"
+   611→            disabled={targetedCards.length === 0}
+   612→            onClick={() => startSession({ type: 'targeted' })}
+   613→          >
+   614→            <RotateCcw className="size-4" aria-hidden /> Réviser les cartes à revoir
+   615→          </Button>
+   616→        </CardContent>
+   617→      </Card>
+   618→
+   619→      {/* Confirmation de réinitialisation */}
+   620→      <Dialog open={resetOpen} onOpenChange={setResetOpen}>
+   621→        <DialogContent>
+   622→          <DialogHeader>
+   623→            <DialogTitle>Réinitialiser la progression des flashcards ?</DialogTitle>
+   624→            <DialogDescription>
+   625→              Les états « maîtrisée » et « à revoir » de toutes les cartes, ainsi que les statistiques de sessions,
+   626→              seront définitivement effacés. Les autres travaux du dossier ne sont pas touchés.
+   627→            </DialogDescription>
+   628→          </DialogHeader>
+   629→          <DialogFooter>
+   630→            <Button variant="outline" onClick={() => setResetOpen(false)}>
+   631→              Annuler
+   632→            </Button>
+   633→            <Button
+   634→              variant="destructive"
+   635→              className="gap-1.5"
+   636→              disabled={resetMutation.isPending}
+   637→              onClick={() => resetMutation.mutate()}
+   638→            >
+   639→              <RefreshCw className="size-3.5" aria-hidden />
+   640→              {resetMutation.isPending ? 'Réinitialisation…' : 'Réinitialiser'}
+   641→            </Button>
+   642→          </DialogFooter>
+   643→        </DialogContent>
+   644→      </Dialog>
+   645→    </div>
+   646→  )
+   647→}
+   648→

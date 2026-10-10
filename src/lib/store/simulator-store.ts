@@ -58,6 +58,10 @@ interface SimulatorState {
   activeModule: string | null
   /** Exercice ouvert dans le détail de module (deep-link heatmap / sélection manuelle). */
   selectedExercise: string | null
+  /** Onglet actif du Centre de connaissances (deep-link recherche globale). */
+  knowledgeTab: string
+  /** Fiche pratique ouverte dans le Centre de connaissances (deep-link recherche globale). */
+  selectedSheet: string | null
   // Fenêtre chef de mission
   chief: ChiefWindowState
   // Bootstrap
@@ -69,6 +73,8 @@ interface SimulatorState {
   setPathBUnlocked: (v: boolean) => void
   setActiveModule: (code: string | null) => void
   setSelectedExercise: (key: string | null) => void
+  setKnowledgeTab: (tab: string) => void
+  setSelectedSheet: (id: string | null) => void
   openChief: (ctx?: { taskKey?: string; moduleCode?: string; exerciseKey?: string; title?: string }) => void
   closeChief: () => void
   toggleChiefMinimize: () => void
@@ -89,6 +95,8 @@ export const useSimulator = create<SimulatorState>()(
       pathBUnlocked: false,
       activeModule: null,
       selectedExercise: null,
+      knowledgeTab: 'glossaire',
+      selectedSheet: null,
       chief: {
         open: false,
         minimized: false,
@@ -110,12 +118,20 @@ export const useSimulator = create<SimulatorState>()(
           // Deep-link exercice (ex. { exercise: 'A1-Q01' } depuis la heatmap) :
           // ouvre le module et sélectionne l'exercice dans le Parcours.
           ...(params.exercise ? { selectedExercise: params.exercise } : {}),
+          // Deep-link Centre de connaissances (recherche globale) : onglet
+          // cible + fiche pratique à ouvrir d'emblée. Naviguer vers les
+          // connaissances SANS paramètre sheet retombe sur la grille
+          // (selectedSheet remis à null) — l'accueil des fiches.
+          ...(params.knowledgeTab ? { knowledgeTab: params.knowledgeTab } : {}),
+          ...(view === 'knowledge' ? { selectedSheet: params.sheet ?? null } : {}),
         })),
       setMonth: (m) => set({ currentMonth: Math.max(1, Math.min(13, m)) }),
       setMode: (mode) => set({ mode }),
       setPathBUnlocked: (v) => set({ pathBUnlocked: v }),
       setActiveModule: (code) => set({ activeModule: code }),
       setSelectedExercise: (key) => set({ selectedExercise: key }),
+      setKnowledgeTab: (tab) => set({ knowledgeTab: tab }),
+      setSelectedSheet: (id) => set({ selectedSheet: id }),
       openChief: (ctx) =>
         set((s) => ({
           chief: {

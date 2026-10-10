@@ -22,6 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useTheme } from 'next-themes'
 import { BookOpen, ChevronLeft, ChevronRight, GraduationCap, Lightbulb, Menu, Moon, Search, Sun, Timer, UserCheck } from 'lucide-react'
 import { ALL_MODULES } from '@/lib/data/module-codes'
+import { PRACTICAL_SHEETS } from '@/lib/data/knowledge'
 
 // ============================================================
 // Barre supérieure : fil d'Ariane, mois courant, recherche
@@ -276,6 +277,17 @@ function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
       { label: 'Livrables', run: () => navigate('deliverables') },
       { label: 'Évaluation & compétences', run: () => navigate('assessment') },
       { label: 'Paramètres', run: () => navigate('settings') },
+    ]},
+    { group: 'Centre de connaissances', actions: [
+      { label: 'Glossaire métier', run: () => navigate('knowledge', null, { knowledgeTab: 'glossaire' }) },
+      { label: 'Fiches pratiques — accueil', run: () => navigate('knowledge', null, { knowledgeTab: 'fiches' }) },
+      { label: 'Références officielles', run: () => navigate('knowledge', null, { knowledgeTab: 'references' }) },
+      { label: 'Comparatif PCG / IFRS', run: () => navigate('knowledge', null, { knowledgeTab: 'pcg-ifrs' }) },
+      { label: 'Flashcards de révision', run: () => navigate('knowledge', null, { knowledgeTab: 'flashcards' }) },
+      ...PRACTICAL_SHEETS.map((s) => ({
+        label: `${s.id} — ${s.title}`,
+        run: () => navigate('knowledge', null, { knowledgeTab: 'fiches', sheet: s.id }),
+      })),
     ]},
     { group: 'Modules parcours A', actions: ALL_MODULES.filter(m => m.path === 'A').map(m => ({
       label: `${m.code} — ${m.title}`, run: () => navigate('learning', null, { module: m.code }),

@@ -681,9 +681,42 @@ function AuxiliariesSection() {
       toast({ title: 'Lettrage posé', description: 'Les lignes sélectionnées sont appariées.' })
       setSelectedLines([])
       queryClient.invalidateQueries({ queryKey: ['auxiliaries'] })
+      queryClient.invalidateQueries({ queryKey: ['lettrages'] })
     },
     onError: (e: Error) => {
       toast({ title: 'Lettrage refusé', description: e.message, variant: 'destructive' })
+    },
+  })
+
+  // Groupes de lettrage posés (délettrage possible)
+  const lettrages = useQuery<{ groups: { id: string; auxCode: string; letter: string; amount: number; lineIds: string[] }[] }>({
+    queryKey: ['lettrages', selected],
+    queryFn: async () => {
+      const res = await fetch(`/api/lettrage${selected ? `?aux=${selected}` : ''}`)
+      if (!res.ok) throw new Error('Erreur lettrages')
+      return res.json()
+    },
+  })
+
+  const unletter = useMutation({
+    mutationFn: async (groupId: string) => {
+      const res = await fetch('/api/lettrage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'unletter', groupId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Erreur délettrage')
+      return data as { message: string }
+    },
+    onSuccess: (data) => {
+      toast({ title: 'Délettrage effectué', description: data.message })
+      setSelectedLines([])
+      queryClient.invalidateQueries({ queryKey: ['auxiliaries'] })
+      queryClient.invalidateQueries({ queryKey: ['lettrages'] })
+    },
+    onError: (e: Error) => {
+      toast({ title: 'Délettrage refusé', description: e.message, variant: 'destructive' })
     },
   })
 
@@ -796,6 +829,52 @@ function AuxiliariesSection() {
           </CardContent>
         </Card>
       </div>
+      {lettrages.data && lettrages.data.groups.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">
+              Lettrages posés {selected ? `— ${selected}` : ''} ({lettrages.data.groups.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <ScrollArea className="max-h-44">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-muted/80">
+                  <tr className="text-left uppercase text-muted-foreground">
+                    <th className="p-2">Lettre</th>
+                    <th className="p-2">Auxiliaire</th>
+                    <th className="p-2 text-right">Montant apparié</th>
+                    <th className="p-2 text-right">Lignes</th>
+                    <th className="p-2 w-28">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lettrages.data.groups.map((g) => (
+                    <tr key={g.id} className="border-t">
+                      <td className="p-1.5 font-mono font-semibold">{g.letter}</td>
+                      <td className="p-1.5 font-mono">{g.auxCode}</td>
+                      <td className="p-1.5 text-right tabular-nums">{fmtEUR(g.amount)}</td>
+                      <td className="p-1.5 text-right tabular-nums">{(g.lineIds ?? []).length}</td>
+                      <td className="p-1.5">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 gap-1 text-xs"
+                          onClick={() => unletter.mutate(g.id)}
+                          disabled={unletter.isPending}
+                          title="Retirer le lettrage (les lignes redeviennent non lettrées)"
+                        >
+                          <Trash2 className="size-3" /> Délettrer
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      ) : null}
       {kind === 'CLIENT' && aux.data?.aging?.length ? (
         <Card>
           <CardHeader><CardTitle className="text-sm">Balance âgée clients (au 31/12)</CardTitle></CardHeader>
@@ -1688,7 +1767,7 @@ function StatementsSection() {
           </CardContent>
         </Card>
         <div className="space-y-4">
-          <Card>
+          <Card className="print-avoid-break">
             <CardHeader><CardTitle className="text-sm">Compte de résultat (par nature)</CardTitle></CardHeader>
             <CardContent className="text-xs">
               <table className="w-full">
@@ -1721,7 +1800,7 @@ function StatementsSection() {
               </table>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="print-avoid-break">
             <CardHeader><CardTitle className="text-sm">Contrôles de cohérence</CardTitle></CardHeader>
             <CardContent className="space-y-1.5 text-xs">
               {d.checks.map((c, i) => (

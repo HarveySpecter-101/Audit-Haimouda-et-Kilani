@@ -60,7 +60,11 @@ export function ModuleStatusBadge({ status }: { status: string }) {
     COMPLETED: { label: 'Terminé', variant: 'default' },
   }
   const cfg = map[status] ?? map.NOT_STARTED
-  return <Badge variant={cfg.variant}>{cfg.label}</Badge>
+  return (
+    <Badge variant={cfg.variant} className={status === 'IN_PROGRESS' ? 'badge-live' : undefined}>
+      {cfg.label}
+    </Badge>
+  )
 }
 
 export function AnomalySeverityBadge({ severity }: { severity: string }) {

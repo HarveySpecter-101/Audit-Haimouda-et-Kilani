@@ -80,3 +80,31 @@ Stage Summary:
 - Les 11 espaces du cahier des charges sont rendus et interconnectés : dashboard, parcours A/B (verrouillage), espace client, centre documentaire, atelier comptable (13 outils), mission d'audit (8 feuilles), calendrier, livrables (30 modèles + workflow de revue), connaissances (glossaire/fiches/références/PCG-IFRS), évaluation (matrice+remédiation+rapport stage), paramètres (export/import JSON, reset confirmé).
 - Fenêtre chef de mission flottante : draggable, 5 onglets, indices progressifs, briefings des 22 tâches du calendrier.
 - Limites connues (voir rapport final) : lettrage sans délettrage UI dédié, échantillonnage aléatoire client-side, commentaires de revue simulés déterministes, examen chronométré non implémenté (mode stocké seulement), nombre de leçons variable selon modules (1-4).
+
+---
+Task ID: CR-1 (cron review #1)
+Agent: main (Z.ai Code) — revue continue planifiée
+Task: QA complète + correction bugs + mode examen chronométré + délettrage UI + graphiques + polish visuel
+
+Work Log:
+- QA initiale : lint 0 erreur, page 200, 15+ routes API 200, toutes les vues sans erreur runtime.
+- QA fonctionnelle : éditeur de livrable testé (remplissage champ via React setter natif → Enregistrer → statut DRAFT, 4 champs sauvés en base) — le « bouton disabled » constaté venait de l'outil fill d'agent-browser qui ne déclenche pas les onChange React, PAS un bug applicatif.
+- BUGS CORRIGÉS :
+  1. exercise-runner.tsx : ligne d'état corrompue « const intLevel, setHintLevel] » (artefact d'un remplacement précédent) → rétablie en « const [hintLevel, setHintLevel] » ; ajout du bloc timer complet (le patch initial n'avait pas été appliqué).
+  2. topbar.tsx : le sélecteur de mode (guidé/mission/examen) avait la classe « hidden » sans breakpoint → invisible partout, le mode examen était INATTEIGNABLE depuis l'UI. Corrigé (visible en permanence).
+  3. /api/lettrage : bloc « unletter » accidentellement supprimé lors d'une précédente réparation de fichier → réinséré dans le POST + GET /api/lettrage ajouté (liste des groupes). Testé bout-en-bout : lettrage 201 → GET groupes → délettrage 200 « Lettrage A retiré (2 lignes délettrées) ».
+  4. Doublon d'import mini-charts dans dashboard-view → dédupliqué (Sparkline retiré, non utilisé).
+- NOUVELLES FONCTIONNALITÉS :
+  F1. MODE EXAMEN CHRONOMÉTRÉ (exigence §6 cahier des charges) : compte à rebours selon difficulté (SHORT 180 s / INTERMEDIATE 420 s / SYNTHESIS 900 s), badge timer ARIA role="timer" (mm:ss, pulse ambre < 60 s, rouge à zéro), indices désactivés en examen avec badge explicite, soumission automatique à l'écoulé avec toast, durationMs transmis à /api/attempts. Testé navigateur : timer visible 02:57→02:46 (décompte exact), « Examen — indices désactivés » affiché.
+  F2. DÉLETTRAGE UI : nouveau panneau « Lettrages posés » dans l'atelier auxiliaires (lettre, auxiliaire, montant, nb lignes, bouton Délettrer avec icône Trash2) + mutations + invalidation TanStack. Testé navigateur : panneau visible après lettrage, clic Délettrer → toast « Lettrage A retiré (2 ligne(s) délettrées) », groupes restants : 0.
+  F3. GRAPHIQUES SVG LÉGERS (mini-charts.tsx, zéro dépendance) : ModuleProgressBars (réussites/disponibles par module, ARIA progressbar), VatBarsMini (TVA collectée/déductible 12 mois, tooltips, légende), DonutScore (jauge circulaire progression), Sparkline. Intégrés au dashboard : donut dans la carte progression (exercices réussis + score moyen), nouvelle rangée 2 colonnes TVA annuelle + exercices par module.
+- AMÉLIORATIONS VISUELLES (globals.css v2) : animation d'entrée des vues (fade-up 250 ms), surbrillance des lignes de table au survol (transition 120 ms), focus clavier visible et cohérent (outline ring), élévation douce des cartes cliquables, point pulsant « badge-live » sur les badges « En cours », styles d'impression (@page 12 mm, tableaux 9 pt, thead répété, print-avoid-break sur les cartes du bilan/CR/comptes), scrollbar horizontale visible, prefers-reduced-motion respecté.
+- QA FINALE : 10/10 vues sans erreur runtime (dashboard, parcours, espace client, documents, atelier, calendrier, livrables, connaissances, évaluation, paramètres) + mission d'audit OK ; mode remis sur « guidé » pour l'utilisateur ; écritures de test nettoyées (TEST-1/TEST-2, AVF-2024-018 LEARNER).
+- DIAGNOSTIC INFRA : /tmp/my-project est un tmpfs obsolète (copie 00:50) — TOUJOURS travailler dans /home/z/my-project. Important : l'outil Bash avale parfois le caractère « [ » en sortie (faux négatifs grep) → vérifier avec od -c en cas de doute.
+
+Stage Summary:
+- 2 bugs bloquants corrigés (mode examen inatteignable, corruption runner), 1 route réparée (lettrage unletter + GET).
+- 2 fonctionnalités majeures du cahier des charges livrées : examen chronométré (§6) et délettrage complet du cycle de lettrage.
+- Dashboard enrichi de 3 visualisations SVG accessibles (zéro dépendance).
+- Polish : transitions, focus, impression, reduced-motion.
+- Limites restantes pour la prochaine revue : (1) extrapolation statistique d'échantillon d'audit automatisée ; (2) commentaires reviewer plus variés (actuellement déterministes) ; (3) éventuel mode sombre à tester plus finement sur les nouveaux graphiques ; (4) le sélecteur de mode mériterait une explication pédagogique (tooltip).

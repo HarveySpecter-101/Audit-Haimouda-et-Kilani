@@ -103,7 +103,7 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
             </Button>
           </div>
           <Select value={mode} onValueChange={(v) => setMode(v as 'guided' | 'mission' | 'exam')}>
-            <SelectTrigger className="hidden h-8 w-36 text-xs" aria-label="Mode d'apprentissage">
+            <SelectTrigger className="h-8 w-40 text-xs" aria-label="Mode d'apprentissage">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

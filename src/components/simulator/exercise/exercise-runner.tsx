@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -27,6 +27,7 @@ import {
   ListChecks,
   RefreshCw,
   Send,
+  Timer,
   XCircle,
 } from 'lucide-react'
 
@@ -86,13 +87,50 @@ export function ExerciseRunner({ exercise }: { exercise: SafeExerciseData }) {
   const [hintLevel, setHintLevel] = useState(0)
   const [showExample, setShowExample] = useState(false)
   const [attempted, setAttempted] = useState(false)
+  const [startedAt] = useState(() => Date.now())
+
+  // ---------- Mode examen : chronomètre facultatif (cahier des charges §6) ----------
+  // Compte à rebours visible selon la difficulté, soumission automatique à zéro.
+  const EXAM_SECONDS: Record<string, number> = {
+    SHORT: 180,
+    INTERMEDIATE: 420,
+    SYNTHESIS: 900,
+  }
+  const examDuration = mode === 'exam' ? (EXAM_SECONDS[exercise.difficulty] ?? 300) : null
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(examDuration)
+  // Référence stable vers la mutation (définie plus bas) pour le timer d'examen
+  const mutationRef = useRef<{ isPending: boolean; mutate: () => void } | null>(null)
+  useEffect(() => {
+    if (examDuration === null || attempted) return
+    const t = setInterval(() => {
+      setSecondsLeft((s) => (s === null ? s : Math.max(0, s - 1)))
+    }, 1000)
+    return () => clearInterval(t)
+  }, [examDuration, attempted])
+  useEffect(() => {
+    if (mode === 'exam' && secondsLeft === 0 && !attempted && !mutationRef.current?.isPending) {
+      toast({
+        title: 'Temps écoulé',
+        description: 'Votre réponse est soumise en l\u00e9tat (mode examen).',
+        variant: 'destructive',
+      })
+      mutationRef.current?.mutate()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [secondsLeft])
 
   const mutation = useMutation({
     mutationFn: async () => {
       const res = await fetch('/api/attempts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ exerciseKey: exercise.key, answer, usedHints: hintLevel, mode }),
+        body: JSON.stringify({
+          exerciseKey: exercise.key,
+          answer,
+          usedHints: hintLevel,
+          mode,
+          durationMs: Date.now() - startedAt,
+        }),
       })
       if (!res.ok) throw new Error('Erreur de correction')
       return res.json() as Promise<{ feedback: AttemptFeedback }>
@@ -118,12 +156,18 @@ export function ExerciseRunner({ exercise }: { exercise: SafeExerciseData }) {
     },
   })
 
+  useEffect(() => {
+    mutationRef.current = mutation
+  }, [mutation])
+
   const difficultyLabel = useMemo(
     () =>
       ({ SHORT: 'Cas court', INTERMEDIATE: 'Intermédiaire', SYNTHESIS: 'Cas de synthèse' })[exercise.difficulty] ??
       exercise.difficulty,
     [exercise.difficulty],
   )
+
+  const mmss = (t: number) => `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`
 
   const canSubmit = useMemo(() => {
     switch (exercise.kind) {
@@ -156,6 +200,22 @@ export function ExerciseRunner({ exercise }: { exercise: SafeExerciseData }) {
           <Badge variant="outline">{difficultyLabel}</Badge>
           <Badge variant="secondary">{exercise.points} pts</Badge>
           {exercise.critical ? <Badge className="gap-1"><AlertTriangle className="size-3" /> Critique</Badge> : null}
+          {mode === 'exam' && secondsLeft !== null ? (
+            <span
+              role="timer"
+              aria-label={`Temps restant : ${mmss(secondsLeft)}`}
+              className={`ml-auto inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 font-mono text-sm font-semibold tabular-nums transition-colors ${
+                secondsLeft === 0
+                  ? 'border-red-400 bg-red-100 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-300'
+                  : secondsLeft <= 60
+                    ? 'animate-pulse border-amber-400 bg-amber-100 text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300'
+                    : 'border-primary/40 bg-primary/10 text-primary'
+              }`}
+            >
+              <Timer className="size-4" aria-hidden />
+              {secondsLeft === 0 ? 'Temps écoulé' : mmss(secondsLeft)}
+            </span>
+          ) : null}
         </div>
         {exercise.context ? <p className="text-sm text-muted-foreground">{exercise.context}</p> : null}
         {exercise.documents?.length ? (
@@ -180,7 +240,7 @@ export function ExerciseRunner({ exercise }: { exercise: SafeExerciseData }) {
             <Send className="size-4" />
             {mutation.isPending ? 'Correction…' : 'Soumettre ma réponse'}
           </Button>
-          {exercise.hints.length > 0 ? (
+          {exercise.hints.length > 0 && mode !== 'exam' ? (
             <Button
               variant="outline"
               size="sm"
@@ -190,6 +250,11 @@ export function ExerciseRunner({ exercise }: { exercise: SafeExerciseData }) {
             >
               <Lightbulb className="size-3.5" /> Indice ({hintLevel}/{exercise.hints.length})
             </Button>
+          ) : null}
+          {mode === 'exam' ? (
+            <Badge variant="outline" className="gap-1 border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
+              <Timer className="size-3" /> Examen — indices désactivés
+            </Badge>
           ) : null}
           {exercise.hasExample ? (
             <Button

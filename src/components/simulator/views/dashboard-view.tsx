@@ -4,6 +4,7 @@ import { useSimulator } from '@/lib/store/simulator-store'
 import { useQuery } from '@tanstack/react-query'
 import { VIEW_LABELS } from '@/lib/store/simulator-store'
 import { StatCard, SectionTitle, ProgressPct, AnomalySeverityBadge } from '@/components/simulator/shared/ui-bits'
+import { ModuleProgressBars, VatBarsMini, DonutScore } from '@/components/simulator/shared/mini-charts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -59,7 +60,7 @@ interface DashboardData {
 interface BootstrapData {
   client: { name: string; legalForm: string; city: string; headcount: number; sector: string }
   counts: { entries: number; documents: number; anomalies: number; attempts: number; deliverables: number }
-  exercises: { total: number; pathA: number; pathB: number }
+  exercises: { total: number; pathA: number; pathB: number; byModule: Record<string, number> }
 }
 
 export default function DashboardView() {
@@ -82,6 +83,24 @@ export default function DashboardView() {
     queryFn: async () => {
       const res = await fetch('/api/bootstrap')
       if (!res.ok) throw new Error('Erreur bootstrap')
+      return res.json()
+    },
+    refetchOnWindowFocus: false,
+  })
+  const vat = useQuery<{ byMonth: { month: number; collectee: number; deductible: number; aDecaisser: number }[] }>({
+    queryKey: ['vat-chart'],
+    queryFn: async () => {
+      const res = await fetch('/api/vat')
+      if (!res.ok) throw new Error('Erreur TVA')
+      return res.json()
+    },
+    refetchOnWindowFocus: false,
+  })
+  const attemptsData = useQuery<{ byExercise: Record<string, { total: number; passed: number }> }>({
+    queryKey: ['attempts-chart'],
+    queryFn: async () => {
+      const res = await fetch('/api/attempts?limit=500')
+      if (!res.ok) throw new Error('Erreur tentatives')
       return res.json()
     },
     refetchOnWindowFocus: false,
@@ -161,6 +180,16 @@ export default function DashboardView() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 p-3">
+              <DonutScore value={d ? d.progression.exercisesTotal > 0 ? d.progression.exercisesPassed / d.progression.exercisesTotal : 0 : 0} />
+              <div className="text-right text-xs text-muted-foreground">
+                <p className="tabular-nums text-sm font-semibold text-foreground">
+                  {d?.progression.exercisesPassed ?? 0}/{d?.progression.exercisesTotal ?? 0}
+                </p>
+                <p>exercices réussis</p>
+                <p className="mt-1 tabular-nums">score moyen : {Math.round((d?.progression.avgScore ?? 0) * 100)} %</p>
+              </div>
+            </div>
             <div className="space-y-1.5">
               <div className="flex justify-between text-sm">
                 <span className="font-medium">Parcours A — Comptabilité</span>
@@ -259,6 +288,51 @@ export default function DashboardView() {
                 </Button>
               ))}
             </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* TVA annuelle — mini graphique */}
+        <Card>
+          <CardHeader className="flex-row items-center justify-between space-y-0">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Landmark className="size-4 text-primary" /> TVA de l'exercice
+            </CardTitle>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1"><span className="size-2.5 rounded-sm bg-chart-1" /> Collectée</span>
+              <span className="flex items-center gap-1"><span className="size-2.5 rounded-sm bg-chart-3" /> Déductible</span>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {vat.data ? <VatBarsMini data={vat.data.byMonth} /> : <Skeleton className="h-32" />}
+          </CardContent>
+        </Card>
+        {/* Exercices par module — barres */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <BookOpen className="size-4 text-primary" /> Exercices réussis par module (parcours A)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {attemptsData.data && boot.data ? (
+              (() => {
+                const byModule = boot.data.exercises.byModule as Record<string, number>
+                const moduleStats = Object.entries(byModule)
+                  .filter(([code]) => code.startsWith('A'))
+                  .map(([code, total]) => {
+                    let passed = 0
+                    for (const [key, v] of Object.entries(attemptsData.data?.byExercise ?? {})) {
+                      if (v.passed > 0 && key.slice(0, key.indexOf('-')) === code) passed += 1
+                    }
+                    return { code, passed, total }
+                  })
+                return <ModuleProgressBars stats={moduleStats} pathLabel="Parcours A" />
+              })()
+            ) : (
+              <Skeleton className="h-32" />
+            )}
           </CardContent>
         </Card>
       </div>

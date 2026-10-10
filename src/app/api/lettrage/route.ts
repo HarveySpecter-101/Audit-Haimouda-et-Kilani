@@ -33,6 +33,30 @@ function nextLetter(existing: string[]): string {
   return 'A' + chars.join('')
 }
 
+export async function GET(request: Request) {
+  try {
+    const url = new URL(request.url)
+    const auxCode = url.searchParams.get('aux')
+    const groups = await db.letteringGroup.findMany({
+      where: auxCode ? { auxCode } : undefined,
+      orderBy: { createdAt: 'asc' },
+    })
+    return NextResponse.json({
+      groups: groups.map((g) => ({
+        id: g.id,
+        auxCode: g.auxCode,
+        letter: g.letter,
+        amount: g.amount,
+        lineIds: g.lineIds,
+        createdAt: g.createdAt,
+      })),
+    })
+  } catch (e) {
+    console.error('lettrage GET error', e)
+    return NextResponse.json({ error: 'Erreur de lecture des lettrages.' }, { status: 500 })
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as {

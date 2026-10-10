@@ -154,3 +154,79 @@
     display: none !important;
   }
 }
+
+/* ============ Améliorations visuelles v2 (revue continue) ============ */
+
+/* Animation d'apparition des vues (spa) */
+@keyframes view-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+main > div {
+  animation: view-enter 0.25s ease-out;
+}
+
+/* Lignes de tableaux : surbrillance au survol */
+tbody tr {
+  transition: background-color 120ms ease;
+}
+tbody tr:hover {
+  background-color: color-mix(in oklch, var(--accent) 45%, transparent);
+}
+
+/* Focus clavier visible et cohérent sur toute l'application */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Cartes : élévation douce au survol pour les cartes cliquables */
+[role='button'].hover\:border-primary\/40:hover,
+button.card-hover {
+  box-shadow: 0 4px 16px -8px color-mix(in oklch, var(--primary) 35%, transparent);
+  transform: translateY(-1px);
+}
+
+/* Badges de statut : point pulsant pour les éléments "en cours" */
+.badge-live::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  margin-right: 6px;
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
+}
+
+/* Impression états financiers : tableaux propres */
+@media print {
+  @page { margin: 12mm; }
+  body { background: white !important; }
+  main { padding: 0 !important; max-width: 100% !important; }
+  .print-avoid-break { break-inside: avoid; }
+  table { font-size: 9pt; }
+  thead { display: table-header-group; }
+}
+
+/* Scrollbar horizontale visible pour les grandes tables */
+.overflow-x-auto::-webkit-scrollbar {
+  height: 8px;
+}
+.overflow-x-auto::-webkit-scrollbar-thumb {
+  background: oklch(0.82 0.02 185);
+  border-radius: 8px;
+}
+
+/* Accessibilité : réduit les animations si demandé */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

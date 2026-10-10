@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ViewSkeleton, SectionTitle } from '@/components/simulator/shared/ui-bits'
 import { DataManagementCard } from '@/components/simulator/settings/data-management-card'
+import { LearnerProfileCard } from '@/components/simulator/settings/learner-profile-card'
 import { useSimulator } from '@/lib/store/simulator-store'
 import { monthLabel } from '@/lib/engine/vat'
 import { fmtDate } from '@/lib/engine/format'
@@ -60,11 +61,14 @@ export default function SettingsView() {
 
   return (
     <div className="space-y-6">
-      <SectionTitle sub="Préférences de travail, sauvegarde/restauration de votre progression et informations système.">
+      <SectionTitle sub="Identité, préférences de travail, sauvegarde/restauration de votre progression et informations système.">
         <span className="flex items-center gap-2">
           <Settings2 className="size-5 text-primary" /> Paramètres &amp; données
         </span>
       </SectionTitle>
+
+      {/* ---------- Profil du stagiaire (attestation) ---------- */}
+      <LearnerProfileCard />
 
       {/* ---------- Préférences ---------- */}
       <Card>

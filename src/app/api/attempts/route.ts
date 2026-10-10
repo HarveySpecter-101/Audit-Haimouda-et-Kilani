@@ -96,17 +96,39 @@ export async function POST(request: Request) {
   }
 }
 
-// GET : historique des tentatives (évaluation, remédiation)
+// GET : historique des tentatives (évaluation, remédiation).
+// ?date=YYYY-MM-DD : filtre sur la journée calendaire locale
+// (drill-down de la heatmap d'assiduité du tableau de bord).
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url)
     const moduleCode = url.searchParams.get('module')
     const path = url.searchParams.get('path')
+    const date = url.searchParams.get('date')
     const limit = Math.min(Number(url.searchParams.get('limit') ?? '100'), 500)
+
+    // Filtre « journée » : gte 00:00 local du jour demandé, lt 00:00 du lendemain
+    // (analyse locale du YYYY-MM-DD, jamais new Date(iso) — pivot UTC indésirable)
+    let dayRange: { gte: Date; lt: Date } | null = null
+    if (date) {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date)
+      if (!m) {
+        return NextResponse.json({ error: 'Paramètre date invalide : format attendu YYYY-MM-DD.' }, { status: 400 })
+      }
+      const start = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 0, 0, 0, 0)
+      if (Number.isNaN(start.getTime())) {
+        return NextResponse.json({ error: 'Paramètre date invalide.' }, { status: 400 })
+      }
+      const end = new Date(start)
+      end.setDate(end.getDate() + 1)
+      dayRange = { gte: start, lt: end }
+    }
+
     const attempts = await db.exerciseAttempt.findMany({
       where: {
         ...(moduleCode ? { moduleCode } : {}),
         ...(path ? { path } : {}),
+        ...(dayRange ? { attemptedAt: dayRange } : {}),
       },
       orderBy: { attemptedAt: 'desc' },
       take: limit,

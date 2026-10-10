@@ -1,6 +1,9 @@
 'use client'
 
-import { CalendarCheck, CheckCircle2, Flame } from 'lucide-react'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { CalendarCheck, CheckCircle2, ChevronRight, Flame, X } from 'lucide-react'
+import { Skeleton } from '@/components/ui/skeleton'
 
 // ============================================================
 // ASSIDUITÉ — HEATMAP DES TENTATIVES (84 jours, style GitHub)
@@ -12,6 +15,8 @@ import { CalendarCheck, CheckCircle2, Flame } from 'lucide-react'
 // Échelle de niveaux 0-4 : 0 = gris sourd « sans activité » ;
 // 1-4 = dégradé teal via color-mix sur var(--primary) — les
 // couleurs dérivent des variables CSS, donc clair comme sombre.
+// Drill-down : un clic (ou Entrée) sur une journée active ouvre
+// le détail des tentatives du jour (requête /api/attempts?date=).
 // ============================================================
 
 export interface ActivityDay {
@@ -31,6 +36,19 @@ export interface ActivityHeatmapProps {
   today?: number
   /** Champ « bestDay » du payload (sinon recalculé localement) */
   bestDay?: number
+}
+
+interface DayAttempt {
+  id: string
+  exerciseKey: string
+  moduleCode: string
+  path: string
+  score: number
+  passed: boolean
+  mode: string
+  usedHints: number
+  criticalError: boolean
+  attemptedAt: string
 }
 
 // Libellés de mois (calendrier français)
@@ -71,6 +89,21 @@ function fmtFR(iso: string): string {
   return `${d}/${m}/${y}`
 }
 
+/** '2026-10-03' → « vendredi 3 octobre 2026 » (long, français) */
+const LONG_DAYS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi']
+const LONG_MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre']
+function fmtLongFR(iso: string): string {
+  const [ys, ms, ds] = iso.split('-')
+  const d = new Date(Number(ys), Number(ms) - 1, Number(ds))
+  return `${LONG_DAYS[d.getDay()]} ${Number(ds)} ${LONG_MONTHS[d.getMonth()]} ${ys}`
+}
+
+/** Heure locale 'HH:MM' depuis l'horodatage d'une tentative. */
+function fmtTime(iso: string): string {
+  const d = new Date(iso)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
 // Géométrie du viewBox (le SVG est responsive : w-full borné, h-auto)
 const CELL = 12
 const GAP = 3
@@ -87,6 +120,21 @@ export function ActivityHeatmap({
   today,
   bestDay,
 }: ActivityHeatmapProps) {
+  const [selected, setSelected] = useState<string | null>(null)
+
+  // Détail des tentatives de la journée sélectionnée (drill-down)
+  const dayQuery = useQuery<{ attempts: DayAttempt[] }>({
+    queryKey: ['attempts-day', selected],
+    enabled: !!selected,
+    queryFn: async () => {
+      const res = await fetch(`/api/attempts?date=${selected}&limit=100`)
+      if (!res.ok) throw new Error('Erreur de lecture des tentatives du jour.')
+      return res.json()
+    },
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+  })
+
   if (!days.length) return null
 
   const todayN = todayCount ?? today ?? 0
@@ -126,7 +174,11 @@ export function ActivityHeatmap({
   const summary =
     `Assiduité sur ${cells.length} jours : ${total} tentatives au total, ${activeDays} jours actifs, ` +
     `${best} tentatives au maximum en une journée, série en cours de ${streak} jour${streak === 1 ? '' : 's'}, ` +
-    `${todayN} tentative${todayN === 1 ? '' : 's'} aujourd'hui.`
+    `${todayN} tentative${todayN === 1 ? '' : 's'} aujourd'hui. Cliquez sur une journée active pour voir le détail des tentatives.`
+
+  const toggleDay = (date: string) => {
+    setSelected((cur) => (cur === date ? null : date))
+  }
 
   return (
     <div className="space-y-3">
@@ -180,7 +232,7 @@ export function ActivityHeatmap({
               {w.label}
             </text>
           ))}
-          {/* Cellules — une par jour, tooltip natif <title> */}
+          {/* Cellules — une par jour ; les journées actives sont cliquables */}
           {cells.map((cell, i) => {
             const slot = offset + i
             const col = Math.floor(slot / 7)
@@ -189,11 +241,50 @@ export function ActivityHeatmap({
             const y = GY + row * PITCH
             const level = levelOf(cell.count)
             const isToday = i === cells.length - 1
+            const isSelected = selected === cell.date
+            const interactive = cell.count > 0
             return (
-              <g key={cell.date}>
-                <title>{`${cell.count} tentative${cell.count === 1 ? '' : 's'} le ${fmtFR(cell.date)}`}</title>
-                <rect x={x} y={y} width={CELL} height={CELL} rx={2} style={{ fill: LEVEL_FILLS[level] }} />
-                {isToday ? (
+              <g
+                key={cell.date}
+                {...(interactive
+                  ? {
+                      role: 'button',
+                      tabIndex: 0,
+                      'aria-label': `Voir les ${cell.count} tentative${cell.count === 1 ? '' : 's'} du ${fmtFR(cell.date)}`,
+                      onClick: () => toggleDay(cell.date),
+                      onKeyDown: (e: React.KeyboardEvent) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          toggleDay(cell.date)
+                        }
+                      },
+                      style: { cursor: 'pointer' },
+                    }
+                  : {})}
+              >
+                <title>{`${cell.count} tentative${cell.count === 1 ? '' : 's'} le ${fmtFR(cell.date)}${interactive ? ' — cliquer pour le détail' : ''}`}</title>
+                <rect
+                  x={x}
+                  y={y}
+                  width={CELL}
+                  height={CELL}
+                  rx={2}
+                  style={{ fill: LEVEL_FILLS[level] }}
+                  className={interactive ? 'transition-[fill] duration-150' : undefined}
+                />
+                {isSelected ? (
+                  // Anneau de sélection (liseré plein du jour choisi)
+                  <rect
+                    x={x - 1.5}
+                    y={y - 1.5}
+                    width={CELL + 3}
+                    height={CELL + 3}
+                    rx={3.5}
+                    fill="none"
+                    className="stroke-primary"
+                    strokeWidth={1.4}
+                  />
+                ) : isToday ? (
                   // Liseré discret autour du jour en cours
                   <rect
                     x={x - 1}
@@ -222,7 +313,73 @@ export function ActivityHeatmap({
           Plus
         </span>
         <span>· {cells.length} jours</span>
+        <span aria-hidden>·</span>
+        <span className="flex items-center gap-1">
+          <ChevronRight className="size-3" aria-hidden /> clic sur une journée active : détail
+        </span>
       </div>
+
+      {/* Détail des tentatives de la journée sélectionnée */}
+      {selected ? (
+        <div
+          role="region"
+          aria-label={`Tentatives du ${fmtFR(selected)}`}
+          className="rounded-lg border bg-muted/20 p-3 text-sm"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-medium capitalize">
+              {fmtLongFR(selected)}
+              <span className="ml-2 font-normal text-muted-foreground">
+                {dayQuery.data ? `${dayQuery.data.attempts.length} tentative${dayQuery.data.attempts.length === 1 ? '' : 's'}` : ''}
+              </span>
+            </p>
+            <button
+              type="button"
+              onClick={() => setSelected(null)}
+              className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              aria-label="Fermer le détail de la journée"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+          {dayQuery.isPending ? (
+            <div className="mt-2 space-y-1.5">
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-5/6" />
+            </div>
+          ) : dayQuery.isError ? (
+            <p className="mt-2 text-xs text-red-700 dark:text-red-400">
+              Impossible de charger les tentatives de cette journée.
+            </p>
+          ) : dayQuery.data.attempts.length === 0 ? (
+            <p className="mt-2 text-xs text-muted-foreground">Aucune tentative enregistrée ce jour-là.</p>
+          ) : (
+            <ul className="mt-2 max-h-56 space-y-1 overflow-y-auto pr-1 print-expand scroll-slim">
+              {dayQuery.data.attempts.map((a) => (
+                <li
+                  key={a.id}
+                  className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border bg-background px-2.5 py-1.5 text-xs"
+                >
+                  <span className="font-mono text-muted-foreground">{a.exerciseKey}</span>
+                  <span className="text-muted-foreground">{a.moduleCode}</span>
+                  {a.passed ? (
+                    <span className="flex items-center gap-1 font-medium text-emerald-700 dark:text-emerald-400">
+                      <CheckCircle2 className="size-3.5" aria-hidden /> réussi
+                    </span>
+                  ) : (
+                    <span className="font-medium text-amber-700 dark:text-amber-400">à retravailler</span>
+                  )}
+                  <span className="ml-auto flex items-center gap-2 text-muted-foreground">
+                    <span className="uppercase tracking-wide">{a.mode === 'exam' ? 'examen' : a.mode === 'mission' ? 'mission' : 'guidé'}</span>
+                    <span className="tabular-nums font-medium text-foreground">{Math.round(a.score * 100)} %</span>
+                    <span className="tabular-nums">{fmtTime(a.attemptedAt)}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
     </div>
   )
 }

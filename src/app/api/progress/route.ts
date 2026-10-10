@@ -12,6 +12,8 @@ import type { CertificateData } from '@/components/simulator/assessment/certific
 //         de fin de parcours (vue Évaluation).
 // PATCH → { moduleCode, lessonsRead?, status?, score? } (upsert)
 //       | { action: 'unlock-path-b' } → appState.pathBUnlocked = true
+//       | { action: 'update-profile', learnerName } → Setting « profile »
+//         (nom du stagiaire affiché sur l'attestation)
 // Renvoie { progress, unlocked? } après chaque écriture.
 // ============================================================
 
@@ -90,7 +92,12 @@ export async function GET() {
       anomaliesResolved,
     }
 
-    return NextResponse.json({ progress, competencies, certificate })
+    return NextResponse.json({
+      progress,
+      competencies,
+      certificate,
+      profile: { learnerName: certificate.learnerName },
+    })
   } catch (e) {
     console.error('progress GET error', e)
     return NextResponse.json({ error: 'Erreur de lecture de la progression.' }, { status: 500 })
@@ -105,6 +112,33 @@ export async function PATCH(request: Request) {
       lessonsRead?: string[]
       status?: (typeof VALID_STATUS)[number]
       score?: number
+      learnerName?: string
+    }
+
+    // --- Profil du stagiaire (nom de l'attestation) ---
+    if (body.action === 'update-profile') {
+      const name = (body.learnerName ?? '').trim().replace(/\s+/g, ' ')
+      if (name.length < 2 || name.length > 60) {
+        return NextResponse.json(
+          { error: 'Nom invalide : 2 à 60 caractères après nettoyage des espaces.' },
+          { status: 400 },
+        )
+      }
+      const value = { learnerName: name, updatedAt: new Date().toISOString() }
+      await db.setting.upsert({
+        where: { key: 'profile' },
+        update: { value },
+        create: { key: 'profile', value },
+      })
+      await db.changeLog.create({
+        data: {
+          entity: 'Setting',
+          entityId: 'profile',
+          action: 'UPDATE',
+          detail: { learnerName: name },
+        },
+      })
+      return NextResponse.json({ profile: { learnerName: name } })
     }
 
     // --- Déblocage du parcours B (fin du parcours A) ---

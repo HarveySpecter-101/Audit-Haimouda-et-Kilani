@@ -288,3 +288,42 @@ Stage Summary:
 3. Pistes suivantes naturelles : (a) export PDF dédié de l'attestation (actuellement impression navigateur) ; (b) heatmap : clic sur une journée → liste des tentatives du jour ; (c) un vrai « profil apprenant » éditable (nom utilisé par l'attestation) ; (d) tooltip pédagogique sur les seuils de la heatmap.
 4. Le sélecteur de mode et les raccourcis en survol de sidebar sont OK (kbd déjà présents).
 
+
+---
+
+## Revue continue 5 — CR-5 (session du 10/10, après-midi)
+
+### État du projet en début de session
+- CR-4 terminée proprement : 22/22 contrôles vues×viewports OK, plantage SelectItem corrigé, intégration réussites complète, heatmap + attestation + bouton retour-en-haut livrés, serveur dev relancé en double-fork (PID 4375, toujours actif en début de session).
+
+### Objectifs de la session
+QA de non-régression, puis les pistes recommandées par CR-4 : profil apprenant éditable, drill-down heatmap, polish.
+
+### Travaux réalisés et vérifiés
+
+**QA initiale** : lint 0/0, serveur 200, balayage 11 vues × 2 viewports → 22/22 OK (0 erreur, 0 débordement) → phase stable, développement de nouvelles fonctionnalités.
+
+**F-6a — PROFIL DU STAGIAIRE ÉDITABLE (piste (c) de CR-4) :**
+- /api/progress PATCH : nouvelle action `update-profile` (learnerName nettoyé, 2-60 car., upsert Setting « profile » { learnerName, updatedAt } + ChangeLog UPDATE) ; GET renvoie désormais un bloc `profile: { learnerName }` en plus du certificate (même calcul).
+- NOUVEAU src/components/simulator/settings/learner-profile-card.tsx : carte « Profil du stagiaire » en tête des paramètres — avatar circulaire teal (initiales dérivées, anneau ring-primary/30, badge Award en superposition), champ « Nom affiché » + bouton Enregistrer, mutation PATCH → toast + invalidation ['assessment-bootstrap'], mention « Modification non enregistrée » tant que non sauvé, hint « conservé lors de la réinitialisation démo ». État 100 % dérivé (brouillon null = valeur serveur — ZÉRO setState dans un effet, conforme à la règle CR-2).
+- Chaîne complète testée navigateur : saisie « Camille Riou » (via setter React natif) → Enregistrer → toast + persistance API (« profile »:{« learnerName »:« Camille Riou »}) → vue Évaluation : l'ATTESTATION affiche bien le nom (invalidation de la clé partagée). Profil remis à « Collaborateur stagiaire » en fin de tests (neutralité).
+
+**F-6b — HEATMAP INTERACTIVE : DRILL-DOWN PAR JOURNÉE (piste (b) de CR-4) :**
+- /api/attempts GET : nouveau paramètre `?date=YYYY-MM-DD` (validation regex, fenêtre locale gte 00:00 / lt lendemain — jamais de pivot UTC) → tentatives du jour.
+- activity-heatmap.tsx : les journées actives deviennent cliquables (g role=button, tabIndex, aria-label « Voir les N tentatives du JJ/MM/AAAA », Entrée/Espace, toggle, curseur pointeur, transition de remplissage) ; anneau de sélection épais sur le jour choisi ; panneau de détail sous la légende (rôle region) : titre date longue française (« samedi 10 octobre 2026 »), liste scrollable max-h-56 (clé d'exercice mono, module, badge réussi/à retravailler, mode, score %, heure HH:MM), squelette pendant le chargement, fermeture par X ; légende enrichie « clic sur une journée active : détail ».
+- Testé navigateur : clic sur la cellule du jour → panneau « 3 tentatives » (A3-Q01 100 % 01:42, A1-Q02, A1-Q01), fermeture X, focus clavier + Entrée ouvre, second Entrée referme (toggle), aria-labels corrects.
+
+**F-6c — POLISH / IDENTITÉ :**
+- Puce « identité du stagiaire » dans la barre supérieure (LearnerChip) : pastille avatar (initiales teal) + nom tronqué (md+), clic → paramètres ; partage la clé ['assessment-bootstrap'] (cache mutualisé Évaluation/profil/topbar — une seule requête réseau) ; initialsOf exporté depuis la carte profil pour réutilisation. Testé : affichage « CR Camille Riou », clic → vue Paramètres, avatar seul sur mobile 375 px sans débordement.
+- Sous-titre des paramètres enrichi (« Identité, préférences… »), carte profil montée avant les préférences.
+
+### QA finale
+- **Lint : 0 erreur, 0 warning.**
+- **Balayage 11 vues × 2 viewports (1280/375) : 0 erreur console, 0 débordement horizontal (22/22 ✔).**
+- Chaîne profil→attestation vérifiée ; drill-down heatmap vérifié (souris + clavier) ; puce topbar vérifiée (affichage, clic, mobile) ; profil remis à la valeur neutre ; captures QA temporaires supprimées.
+- VLM : carte profil (avatar teal + badge Award, disposition propre) et panneau de détail heatmap conformes, aucun glitch.
+
+### Risques / recommandations pour la prochaine revue
+1. Le profil n'est PAS inclus dans l'export/import JSON des travaux (settings/export) — l'exporter serait cohérent (clé « profile » du Setting) si besoin de continuité entre environnements.
+2. Pistes suivantes : (a) export PDF dédié de l'attestation (impression navigateur aujourd'hui) ; (b) tooltip pédagogique sur les seuils de niveaux de la heatmap ; (c) champ « poste visé » optionnel du profil (libellé sur l'attestation) ; (d) liens cliquables depuis le panneau du jour vers l'exercice concerné.
+3. Serveur dev : toujours le process double-fork de CR-4 (voir consignes de relance dans CR-4).

@@ -1,8 +1,10 @@
 'use client'
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useSimulator, VIEW_LABELS } from '@/lib/store/simulator-store'
 import { monthLabel } from '@/lib/engine/vat'
+import { initialsOf } from '@/components/simulator/settings/learner-profile-card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb'
@@ -116,6 +118,7 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
           </BreadcrumbList>
         </Breadcrumb>
         <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
+          <LearnerChip />
           <Button
             variant="outline"
             size="sm"
@@ -216,6 +219,39 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
       </div>
       <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
     </header>
+  )
+}
+
+// Puce « identité du stagiaire » : avatar à initiales + nom, cliquable
+// vers les paramètres où le profil (nom de l'attestation) se modifie.
+// Partage la clé ['assessment-bootstrap'] avec l'Évaluation et le profil —
+// une seule requête réseau pour les trois consommateurs.
+function LearnerChip() {
+  const navigate = useSimulator((s) => s.navigate)
+  const boot = useQuery<{ profile?: { learnerName?: string } }>({
+    queryKey: ['assessment-bootstrap'],
+    queryFn: async () => {
+      const res = await fetch('/api/progress')
+      if (!res.ok) throw new Error('Erreur')
+      return res.json()
+    },
+    refetchOnWindowFocus: false,
+    staleTime: 60_000,
+  })
+  const name = boot.data?.profile?.learnerName ?? 'Collaborateur stagiaire'
+  return (
+    <button
+      type="button"
+      onClick={() => navigate('settings')}
+      aria-label={`Profil du stagiaire : ${name} — ouvrir les paramètres`}
+      title={`Profil : ${name} (cliquez pour modifier)`}
+      className="flex h-8 items-center gap-2 rounded-full border pl-1 pr-1 transition-colors hover:border-primary/50 hover:bg-accent/40 md:pr-3"
+    >
+      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] font-semibold text-primary ring-1 ring-primary/40">
+        {initialsOf(name)}
+      </span>
+      <span className="hidden max-w-32 truncate text-xs font-medium text-muted-foreground md:inline">{name}</span>
+    </button>
   )
 }
 

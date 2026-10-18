@@ -257,15 +257,15 @@ export function ExerciseRunner({ exercise }: { exercise: SafeExerciseData }) {
             <Send className="size-4" />
             {mutation.isPending ? 'Correction…' : 'Soumettre ma réponse'}
           </Button>
-          {exercise.hints.length > 0 && mode !== 'exam' ? (
+          {(exercise.hints?.length ?? 0) > 0 && mode !== 'exam' ? (
             <Button
               variant="outline"
               size="sm"
               className="gap-1.5"
-              onClick={() => setHintLevel(Math.min(exercise.hints.length, hintLevel + 1))}
-              disabled={hintLevel >= exercise.hints.length}
+              onClick={() => setHintLevel(Math.min(exercise.hints?.length ?? 0, hintLevel + 1))}
+              disabled={hintLevel >= (exercise.hints?.length ?? 0)}
             >
-              <Lightbulb className="size-3.5" /> Indice ({hintLevel}/{exercise.hints.length})
+              <Lightbulb className="size-3.5" /> Indice ({hintLevel}/{exercise.hints?.length ?? 0})
             </Button>
           ) : null}
           {mode === 'exam' ? (
@@ -301,9 +301,9 @@ export function ExerciseRunner({ exercise }: { exercise: SafeExerciseData }) {
           ) : null}
         </div>
 
-        {hintLevel > 0 && (
+        {hintLevel > 0 && (exercise.hints?.length ?? 0) > 0 && (
           <div className="space-y-1 rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950">
-            {exercise.hints.slice(0, hintLevel).map((h, i) => (
+            {(exercise.hints ?? []).slice(0, hintLevel).map((h, i) => (
               <p key={i} className="text-sm text-amber-900 dark:text-amber-200">
                 <span className="font-semibold">Indice {i + 1} : </span>
                 {h}

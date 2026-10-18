@@ -15,6 +15,7 @@ import { MODULES_B_FULL } from '@/lib/data/modules-b'
 import { TASKS_BY_KEY } from '@/lib/data/calendar'
 import { LessonBlockView } from '@/components/simulator/knowledge/lesson-blocks'
 import { ExerciseRunner, type SafeExerciseData } from '@/components/simulator/exercise/exercise-runner'
+import { SimulatorErrorBoundary } from '@/components/simulator/shared/error-boundary'
 import { ModuleStatusBadge, ProgressPct, SectionTitle, ViewSkeleton, EmptyState } from '@/components/simulator/shared/ui-bits'
 import type { LearningModule } from '@/lib/types'
 import {
@@ -213,6 +214,11 @@ export default function LearningView() {
       return (
         <ModuleDetail
           module={mod}
+          modulesOfPath={modulesOfPath}
+          onSelectModule={(code) => {
+            setActiveModule(code)
+            setSelectedExercise(null)
+          }}
           stats={moduleStats.get(mod.code)}
           progressRow={progressByModule.get(mod.code)}
           competencies={boot.data.competencies}
@@ -317,7 +323,6 @@ function useCallbackModuleStats(
 ): Map<string, { completed: boolean; passed: number; total: number; score: number; unlocked: boolean }> {
   return useMemo(() => {
     const map = new Map<string, { completed: boolean; passed: number; total: number; score: number; unlocked: boolean }>()
-    let previousCompleted = true // A1 (ou B1) toujours déverrouillé
     for (const m of modules) {
       const total = m.exerciseKeys?.length ?? 0
       const passed = Math.min(passedByModule.get(m.code) ?? 0, total)
@@ -325,8 +330,8 @@ function useCallbackModuleStats(
       const row = progressByModule.get(m.code)
       const completed = row?.status === 'COMPLETED' || (total > 0 && ratio >= COMPLETION_RATIO)
       const score = row?.score && row.score > 0 ? row.score : ratio
-      map.set(m.code, { completed, passed, total, score, unlocked: previousCompleted })
-      previousCompleted = completed
+      // Tous les modules du parcours sont accessibles en consultation libre
+      map.set(m.code, { completed, passed, total, score, unlocked: true })
     }
     return map
   }, [modules, passedByModule, progressByModule])
@@ -350,14 +355,13 @@ function ModuleList({
     <div className="space-y-3">
       {modules.map((m) => {
         const stat = stats.get(m.code)
-        const locked = !(stat?.unlocked ?? true)
         const pct = stat && stat.total > 0 ? (stat.passed / stat.total) * 100 : 0
         return (
           <Card
             key={m.code}
-            className={`gap-2 py-4 transition-colors ${locked ? 'opacity-70' : 'cursor-pointer hover:border-primary/40'}`}
-            onClick={() => !locked && onSelect(m.code)}
-            role={locked ? undefined : 'button'}
+            className="gap-2 py-4 transition-colors cursor-pointer hover:border-primary/40 hover:bg-accent/10"
+            onClick={() => onSelect(m.code)}
+            role="button"
             aria-label={`Module ${m.code} — ${m.title}`}
           >
             <CardHeader className="pb-0">
@@ -367,15 +371,9 @@ function ModuleList({
                 </Badge>
                 <CardTitle className="text-base">{m.title}</CardTitle>
                 <div className="ml-auto flex items-center gap-2">
-                  {locked ? (
-                    <Badge variant="outline" className="gap-1 text-muted-foreground">
-                      <Lock className="size-3" /> Verrouillé
-                    </Badge>
-                  ) : (
-                    <ModuleStatusBadge
-                      status={stat?.completed ? 'COMPLETED' : stat && stat.passed > 0 ? 'IN_PROGRESS' : 'NOT_STARTED'}
-                    />
-                  )}
+                  <ModuleStatusBadge
+                    status={stat?.completed ? 'COMPLETED' : stat && stat.passed > 0 ? 'IN_PROGRESS' : 'NOT_STARTED'}
+                  />
                   <ChevronRight className="size-4 text-muted-foreground" />
                 </div>
               </div>
@@ -390,11 +388,6 @@ function ModuleList({
                   </span>
                 </div>
               ) : null}
-              {locked ? (
-                <p className="text-xs text-muted-foreground">
-                  Terminez le module précédent pour déverrouiller celui-ci.
-                </p>
-              ) : null}
             </CardContent>
           </Card>
         )
@@ -407,6 +400,8 @@ function ModuleList({
 
 function ModuleDetail({
   module,
+  modulesOfPath = [],
+  onSelectModule,
   stats,
   progressRow,
   competencies,
@@ -419,6 +414,8 @@ function ModuleDetail({
   syncing,
 }: {
   module: LearningModule
+  modulesOfPath?: LearningModule[]
+  onSelectModule?: (code: string) => void
   stats?: { completed: boolean; passed: number; total: number; score: number }
   progressRow?: ProgressRow
   competencies: { code: string; label: string }[]
@@ -432,6 +429,10 @@ function ModuleDetail({
 }) {
   const lessonsRead = new Set(progressRow?.lessonsRead ?? [])
   const pct = stats && stats.total > 0 ? (stats.passed / stats.total) * 100 : 0
+
+  const currentIndex = modulesOfPath.findIndex((m) => m.code === module.code)
+  const prevModule = currentIndex > 0 ? modulesOfPath[currentIndex - 1] : null
+  const nextModule = currentIndex >= 0 && currentIndex < modulesOfPath.length - 1 ? modulesOfPath[currentIndex + 1] : null
 
   const exercises = useQuery<SafeExerciseList>({
     queryKey: ['exercises', module.code],
@@ -449,8 +450,7 @@ function ModuleDetail({
 
   const current = exercises.data?.exercises.find((e) => e.key === selectedExercise) ?? null
 
-  // Défilement doux vers l'exercice ciblé dès qu'il est chargé — le
-  // deep-link (heatmap) arrive en milieu de page, le runner doit être visible.
+  // Défilement doux vers l'exercice ciblé dès qu'il est chargé
   const runnerRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
     if (!current || !selectedExercise) return
@@ -467,6 +467,30 @@ function ModuleDetail({
           Module {module.order} · {module.code}
         </Badge>
         <ModuleStatusBadge status={stats?.completed ? 'COMPLETED' : stats && stats.passed > 0 ? 'IN_PROGRESS' : 'NOT_STARTED'} />
+        
+        {/* Navigation directe entre modules / chapitres */}
+        <div className="ml-auto flex items-center gap-2">
+          {prevModule ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1 text-xs"
+              onClick={() => onSelectModule?.(prevModule.code)}
+            >
+              <ArrowLeft className="size-3" /> {prevModule.code}
+            </Button>
+          ) : null}
+          {nextModule ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1 text-xs font-medium"
+              onClick={() => onSelectModule?.(nextModule.code)}
+            >
+              {nextModule.code} <ChevronRight className="size-3" />
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       <SectionTitle sub={module.summary}>{module.title}</SectionTitle>
@@ -631,11 +655,38 @@ function ModuleDetail({
                   Fermer
                 </Button>
               </div>
-              <ExerciseRunner exercise={current} />
+              <SimulatorErrorBoundary
+                fallbackTitle="Impossible d’afficher cet exercice"
+                onReset={() => onSelectExercise(null)}
+              >
+                <ExerciseRunner key={current.key} exercise={current} />
+              </SimulatorErrorBoundary>
             </div>
           ) : null}
         </CardContent>
       </Card>
+
+      {/* ---------- Navigation bas de page (module précédent / suivant) ---------- */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+        {prevModule ? (
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => onSelectModule?.(prevModule.code)}
+          >
+            <ArrowLeft className="size-4" /> {prevModule.code} — {prevModule.title}
+          </Button>
+        ) : <div />}
+        {nextModule ? (
+          <Button
+            variant="default"
+            className="gap-2"
+            onClick={() => onSelectModule?.(nextModule.code)}
+          >
+            {nextModule.code} — {nextModule.title} <ChevronRight className="size-4" />
+          </Button>
+        ) : <div />}
+      </div>
     </div>
   )
 }

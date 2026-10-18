@@ -289,35 +289,96 @@ export function gradeCase(ex: CaseExercise, ans: AttemptInput): AttemptFeedback 
   let scoreSum = 0
   let critical = false
   for (const step of ex.steps) {
-    const stepAns = (steps[step.id] ?? {}) as AttemptInput
+    const rawStepAns = steps[step.id] ?? {}
+    const stepAns = (typeof rawStepAns === 'object' && rawStepAns !== null ? rawStepAns : {}) as AttemptInput
     let stepFb: AttemptFeedback | null = null
+
     if (step.kind === 'qcm' && step.solution) {
       const sol = step.solution as string[]
-      const chosen = stepAns.qcm?.choiceIds ?? []
+      const chosen =
+        stepAns.qcm?.choiceIds ??
+        (Array.isArray(rawStepAns)
+          ? (rawStepAns as string[])
+          : typeof rawStepAns === 'string'
+            ? [rawStepAns]
+            : [])
       const ok = chosen.length === sol.length && chosen.every((c) => sol.includes(c))
-      stepFb = { ...baseFeedback(), score: ok ? 1 : 0, passed: ok, correct: ok ? ['ok'] : [], explanation: step.explanations?.[sol[0]] ?? '' }
+      stepFb = {
+        ...baseFeedback(),
+        score: ok ? 1 : 0,
+        passed: ok,
+        correct: ok ? ['ok'] : [],
+        explanation: step.explanations?.[sol[0]] ?? (ok ? 'Bonne réponse.' : 'Réponse incorrecte.'),
+      }
     } else if (step.kind === 'calculation' && step.solution) {
       const sol = step.solution as Record<string, number>
-      const given = stepAns.calculation ?? {}
+      const given =
+        stepAns.calculation ??
+        (typeof rawStepAns === 'object' && rawStepAns !== null && !('calculation' in rawStepAns)
+          ? (rawStepAns as Record<string, number>)
+          : {})
       const keys = Object.keys(sol)
       const good = keys.filter((k) => Math.abs((given[k] ?? NaN) - sol[k]) <= 1).length
-      stepFb = { ...baseFeedback(), score: keys.length ? good / keys.length : 0, passed: good === keys.length, correct: [], explanation: '' }
+      stepFb = {
+        ...baseFeedback(),
+        score: keys.length ? good / keys.length : 0,
+        passed: good === keys.length,
+        correct: [],
+        explanation: good === keys.length ? 'Calculs exacts.' : `${good}/${keys.length} calculs corrects.`,
+      }
     } else if (step.kind === 'detection' && step.solution) {
       const sol = step.solution as string[]
-      const chosen = stepAns.detection?.ids ?? []
+      const chosen =
+        stepAns.detection?.ids ??
+        (Array.isArray(rawStepAns) ? (rawStepAns as string[]) : [])
       const good = chosen.filter((c) => sol.includes(c)).length
       const bad = chosen.filter((c) => !sol.includes(c)).length
-      stepFb = { ...baseFeedback(), score: Math.max(0, (good - bad) / sol.length), passed: bad === 0 && good === sol.length, explanation: '' }
+      stepFb = {
+        ...baseFeedback(),
+        score: Math.max(0, (good - bad) / sol.length),
+        passed: bad === 0 && good === sol.length,
+        explanation:
+          bad === 0 && good === sol.length
+            ? 'Anomalies identifiées avec succès.'
+            : `${good}/${sol.length} anomalie(s) trouvée(s)${bad > 0 ? `, ${bad} faux positif(s)` : ''}.`,
+      }
+    } else if (step.kind === 'essay') {
+      const text = (
+        stepAns.essay?.text ??
+        (typeof rawStepAns === 'string'
+          ? rawStepAns
+          : typeof (stepAns as Record<string, unknown>).text === 'string'
+            ? (stepAns as Record<string, unknown>).text
+            : '')
+      )
+        .toString()
+        .trim()
+      const words = text ? text.split(/\s+/).filter(Boolean).length : 0
+      const ok = words >= 10
+      const score = words >= 20 ? 1 : words >= 10 ? 0.8 : words > 0 ? 0.5 : 0
+      stepFb = {
+        ...baseFeedback(),
+        score,
+        passed: ok,
+        correct: ok ? ['Commentaire documenté'] : [],
+        explanation: ok
+          ? `Commentaire bien développé (${words} mots).`
+          : `Commentaire insuffisant (${words} mots, minimum 10 mots attendus).`,
+      }
+    } else {
+      stepFb = {
+        ...baseFeedback(),
+        score: 1,
+        passed: true,
+        correct: ['Étape validée'],
+        explanation: 'Étape complétée.',
+      }
     }
+
     if (stepFb) {
       scoreSum += stepFb.score
-      // Le drapeau booléen de criticité vit au niveau de l'exercice
-      // (BaseExercise.critical) — `explanations` est un Record<string,string>
-      // (libellés par choix), donc l'ancienne lecture `.critical === true`
-      // était structurellement morte. Même résultat sur le corpus actuel :
-      // aucun cas de synthèse n'est marqué critical.
       if (!stepFb.passed) critical = critical || ex.critical === true
-      results.push(`${step.title} : ${Math.round(stepFb.score * 100)} %`)
+      results.push(`${step.title} : ${Math.round(stepFb.score * 100)} %${stepFb.explanation ? ` (${stepFb.explanation})` : ''}`)
     }
   }
   const graded = ex.steps.length
@@ -395,10 +456,18 @@ export function sanitizeExercise(ex: QcmExercise | EntryExercise | CalculationEx
   }
   if (kind === 'case') {
     safe.steps = ex.steps.map((s) => {
-      const { solution, explanations, ...rest } = s
+      const { solution, explanations, ...rest } = s as unknown as Record<string, unknown>
       void solution
       void explanations
-      return rest
+      const choices = rest.choices ?? (rest.data as Record<string, unknown> | undefined)?.choices
+      const fields = rest.fields ?? (rest.data as Record<string, unknown> | undefined)?.fields
+      const candidates = rest.candidates ?? (rest.data as Record<string, unknown> | undefined)?.candidates
+      return {
+        ...rest,
+        ...(choices ? { choices } : {}),
+        ...(fields ? { fields } : {}),
+        ...(candidates ? { candidates } : {}),
+      }
     })
   }
   return safe

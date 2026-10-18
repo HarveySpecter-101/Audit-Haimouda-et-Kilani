@@ -64,7 +64,22 @@ export interface SafeExerciseData {
   candidates?: { id: string; label: string; meta?: string }[]
   items?: { id: string; label: string }[]
   minWords?: number
-  steps?: { id: string; kind: string; title: string; prompt: string }[]
+  steps?: {
+    id: string
+    kind: string
+    title: string
+    prompt: string
+    data?: {
+      choices?: { id: string; text: string }[]
+      fields?: { id: string; label: string; unit?: string }[]
+      candidates?: { id: string; label: string; meta?: string }[]
+    }
+    choices?: { id: string; text: string }[]
+    fields?: { id: string; label: string; unit?: string }[]
+    candidates?: { id: string; label: string; meta?: string }[]
+    multi?: boolean
+    minWords?: number
+  }[]
 }
 
 export interface AttemptInputDTO {
@@ -188,7 +203,7 @@ export function ExerciseRunner({ exercise }: { exercise: SafeExerciseData }) {
       case 'essay':
         return (answer.essay?.text?.trim().length ?? 0) > 20
       case 'case':
-        return true
+        return Object.keys(answer.case?.steps ?? {}).length > 0
       default:
         return false
     }
@@ -352,11 +367,12 @@ function QcmBody({
   disabled,
 }: {
   exercise: SafeExerciseData
-  answer: AttemptInputDTO
+  answer?: AttemptInputDTO
   setAnswer: (a: AttemptInputDTO) => void
   disabled: boolean
 }) {
-  const selected = answer.qcm?.choiceIds ?? []
+  const currentAnswer = answer ?? {}
+  const selected = currentAnswer.qcm?.choiceIds ?? []
   const toggle = (id: string) => {
     if (disabled) return
     const next = exercise.multi
@@ -364,7 +380,7 @@ function QcmBody({
         ? selected.filter((s) => s !== id)
         : [...selected, id]
       : [id]
-    setAnswer({ ...answer, qcm: { choiceIds: next } })
+    setAnswer({ ...currentAnswer, qcm: { choiceIds: next } })
   }
   if (exercise.multi) {
     return (
@@ -395,7 +411,7 @@ function QcmBody({
   return (
     <RadioGroup
       value={selected[0] ?? ''}
-      onValueChange={(v) => !disabled && setAnswer({ ...answer, qcm: { choiceIds: [v] } })}
+      onValueChange={(v) => !disabled && setAnswer({ ...currentAnswer, qcm: { choiceIds: [v] } })}
       className="gap-2.5"
     >
       {exercise.choices?.map((c) => {
@@ -428,13 +444,14 @@ function EntryBody({
   setAnswer,
   disabled,
 }: {
-  answer: AttemptInputDTO
+  answer?: AttemptInputDTO
   setAnswer: (a: AttemptInputDTO) => void
   disabled: boolean
 }) {
-  const [journal, setJournal] = useState(answer.entry?.journal ?? 'ACH')
+  const currentAnswer = answer ?? {}
+  const [journal, setJournal] = useState(currentAnswer.entry?.journal ?? 'ACH')
   const [lines, setLines] = useState<DraftLine[]>(
-    answer.entry?.lines?.map((l) => ({
+    currentAnswer.entry?.lines?.map((l) => ({
       accountCode: l.accountCode,
       label: l.label ?? '',
       debit: l.debit ? String(l.debit) : '',
@@ -452,7 +469,7 @@ function EntryBody({
 
   const pushToAnswer = (nextLines: DraftLine[], nextJournal: string) => {
     setAnswer({
-      ...answer,
+      ...currentAnswer,
       entry: {
         journal: nextJournal,
         lines: nextLines
@@ -585,11 +602,12 @@ function CalculationBody({
   disabled,
 }: {
   exercise: SafeExerciseData
-  answer: AttemptInputDTO
+  answer?: AttemptInputDTO
   setAnswer: (a: AttemptInputDTO) => void
   disabled: boolean
 }) {
-  const calc = answer.calculation ?? {}
+  const currentAnswer = answer ?? {}
+  const calc = currentAnswer.calculation ?? {}
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       {exercise.fields?.map((f) => (
@@ -601,7 +619,7 @@ function CalculationBody({
             id={`calc-${f.id}`}
             value={calc[f.id] !== undefined ? String(calc[f.id]) : ''}
             onChange={(e) =>
-              setAnswer({ ...answer, calculation: { ...calc, [f.id]: Number(e.target.value.replace(',', '.')) || 0 } })
+              setAnswer({ ...currentAnswer, calculation: { ...calc, [f.id]: Number(e.target.value.replace(',', '.')) || 0 } })
             }
             placeholder="0,00"
             inputMode="decimal"
@@ -621,11 +639,12 @@ function MatchingBody({
   disabled,
 }: {
   exercise: SafeExerciseData
-  answer: AttemptInputDTO
+  answer?: AttemptInputDTO
   setAnswer: (a: AttemptInputDTO) => void
   disabled: boolean
 }) {
-  const matching = answer.matching ?? {}
+  const currentAnswer = answer ?? {}
+  const matching = currentAnswer.matching ?? {}
   return (
     <div className="space-y-2">
       {exercise.left?.map((l) => (
@@ -635,7 +654,7 @@ function MatchingBody({
           <div className="w-56">
             <Select
               value={matching[l.id] ?? ''}
-              onValueChange={(v) => !disabled && setAnswer({ ...answer, matching: { ...matching, [l.id]: v } })}
+              onValueChange={(v) => !disabled && setAnswer({ ...currentAnswer, matching: { ...matching, [l.id]: v } })}
               disabled={disabled}
             >
               <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Associer…" /></SelectTrigger>
@@ -659,15 +678,16 @@ function DetectionBody({
   disabled,
 }: {
   exercise: SafeExerciseData
-  answer: AttemptInputDTO
+  answer?: AttemptInputDTO
   setAnswer: (a: AttemptInputDTO) => void
   disabled: boolean
 }) {
-  const selected = answer.detection?.ids ?? []
+  const currentAnswer = answer ?? {}
+  const selected = currentAnswer.detection?.ids ?? []
   const toggle = (id: string) => {
     if (disabled) return
     const next = selected.includes(id) ? selected.filter((s) => s !== id) : [...selected, id]
-    setAnswer({ ...answer, detection: { ids: next } })
+    setAnswer({ ...currentAnswer, detection: { ids: next } })
   }
   return (
     <div className="space-y-2">
@@ -705,11 +725,12 @@ function OrderingBody({
   disabled,
 }: {
   exercise: SafeExerciseData
-  answer: AttemptInputDTO
+  answer?: AttemptInputDTO
   setAnswer: (a: AttemptInputDTO) => void
   disabled: boolean
 }) {
-  const selected = answer.ordering?.ids ?? []
+  const currentAnswer = answer ?? {}
+  const selected = currentAnswer.ordering?.ids ?? []
   const items = exercise.items ?? []
   const move = (id: string, dir: -1 | 1) => {
     if (disabled) return
@@ -718,12 +739,12 @@ function OrderingBody({
     const target = idx + dir
     if (idx >= 0 && target >= 0 && target < next.length) {
       ;[next[idx], next[target]] = [next[target], next[idx]]
-      setAnswer({ ...answer, ordering: { ids: next } })
+      setAnswer({ ...currentAnswer, ordering: { ids: next } })
     }
   }
   const add = (id: string) => {
     if (disabled || selected.includes(id)) return
-    setAnswer({ ...answer, ordering: { ids: [...selected, id] } })
+    setAnswer({ ...currentAnswer, ordering: { ids: [...selected, id] } })
   }
   return (
     <div className="grid gap-4 sm:grid-cols-2">
@@ -769,23 +790,24 @@ function EssayBody({
   disabled,
 }: {
   exercise: SafeExerciseData
-  answer: AttemptInputDTO
+  answer?: AttemptInputDTO
   setAnswer: (a: AttemptInputDTO) => void
   disabled: boolean
 }) {
-  const text = answer.essay?.text ?? ''
+  const currentAnswer = answer ?? {}
+  const text = currentAnswer.essay?.text ?? ''
   const words = text.trim().split(/\s+/).filter(Boolean).length
   return (
     <div className="space-y-2">
       <Label htmlFor="essay" className="text-xs">
-        Rédigez votre conclusion documentée (min. {exercise.minWords ?? 80} mots — {words} actuellement)
+        Rédigez votre commentaire documenté (min. {exercise.minWords ?? 20} mots — {words} actuellement)
       </Label>
       <Textarea
         id="essay"
         value={text}
-        onChange={(e) => !disabled && setAnswer({ ...answer, essay: { text: e.target.value } })}
-        placeholder="Objectif → travaux réalisés → éléments obtenus → conclusion → limite…"
-        className="min-h-40"
+        onChange={(e) => !disabled && setAnswer({ ...currentAnswer, essay: { text: e.target.value } })}
+        placeholder="Structure financière, trésorerie, constats et recommandations…"
+        className="min-h-28"
         disabled={disabled}
       />
     </div>
@@ -799,53 +821,88 @@ function CaseBody({
   disabled,
 }: {
   exercise: SafeExerciseData
-  answer: AttemptInputDTO
+  answer?: AttemptInputDTO
   setAnswer: (a: AttemptInputDTO) => void
   disabled: boolean
 }) {
-  const steps = answer.case?.steps ?? {}
+  const currentAnswer = answer ?? {}
+  const steps = (currentAnswer.case?.steps ?? {}) as Record<string, unknown>
   const setStep = (id: string, value: unknown) => {
-    setAnswer({ ...answer, case: { steps: { ...steps, [id]: value } } })
+    setAnswer({ ...currentAnswer, case: { steps: { ...steps, [id]: value } } })
   }
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <ListChecks className="size-3.5" /> Cas multi-étapes : répondez à chaque étape puis soumettez l’ensemble.
       </p>
-      {exercise.steps?.map((s, i) => (
-        <div key={s.id} className="rounded-md border p-3">
-          <p className="text-sm font-medium">
-            Étape {i + 1} — {s.title}
-          </p>
-          <p className="mb-2 text-sm text-muted-foreground">{s.prompt}</p>
-          {s.kind === 'qcm' ? (
-            <QcmBody
-              exercise={{
-                ...exercise,
-                choices: (s as unknown as { data?: { choices?: { id: string; text: string }[] } }).data?.choices ?? [],
-                multi: false,
-              }}
-              answer={steps[s.id] as AttemptInputDTO}
-              setAnswer={(a) => setStep(s.id, a)}
-              disabled={disabled}
-            />
-          ) : s.kind === 'essay' ? (
-            <EssayBody
-              exercise={{ ...exercise, minWords: 30 }}
-              answer={steps[s.id] as AttemptInputDTO}
-              setAnswer={(a) => setStep(s.id, a)}
-              disabled={disabled}
-            />
-          ) : (
-            <Textarea
-              value={typeof steps[s.id] === 'string' ? (steps[s.id] as string) : ''}
-              onChange={(e) => setStep(s.id, e.target.value)}
-              placeholder="Votre réponse…"
-              disabled={disabled}
-            />
-          )}
-        </div>
-      ))}
+      {exercise.steps?.map((s, i) => {
+        const stepChoices = (s as unknown as { choices?: { id: string; text: string }[]; data?: { choices?: { id: string; text: string }[] } }).choices ??
+          (s as unknown as { data?: { choices?: { id: string; text: string }[] } }).data?.choices ??
+          []
+        const stepFields = (s as unknown as { fields?: { id: string; label: string; unit?: string }[]; data?: { fields?: { id: string; label: string; unit?: string }[] } }).fields ??
+          (s as unknown as { data?: { fields?: { id: string; label: string; unit?: string }[] } }).data?.fields ??
+          []
+        const stepCandidates = (s as unknown as { candidates?: { id: string; label: string; meta?: string }[]; data?: { candidates?: { id: string; label: string; meta?: string }[] } }).candidates ??
+          (s as unknown as { data?: { candidates?: { id: string; label: string; meta?: string }[] } }).data?.candidates ??
+          []
+        const stepAnswer = (steps[s.id] as AttemptInputDTO) ?? {}
+
+        return (
+          <div key={s.id} className="rounded-md border p-3.5 space-y-2.5 bg-card">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-foreground">
+                Étape {i + 1} — {s.title}
+              </p>
+              <p className="text-sm text-muted-foreground leading-relaxed">{s.prompt}</p>
+            </div>
+            {s.kind === 'qcm' ? (
+              <QcmBody
+                exercise={{
+                  ...exercise,
+                  choices: stepChoices,
+                  multi: (s as unknown as { multi?: boolean }).multi ?? false,
+                }}
+                answer={stepAnswer}
+                setAnswer={(a) => setStep(s.id, a)}
+                disabled={disabled}
+              />
+            ) : s.kind === 'essay' ? (
+              <EssayBody
+                exercise={{ ...exercise, minWords: (s as unknown as { minWords?: number }).minWords ?? 20 }}
+                answer={stepAnswer}
+                setAnswer={(a) => setStep(s.id, a)}
+                disabled={disabled}
+              />
+            ) : s.kind === 'calculation' ? (
+              <CalculationBody
+                exercise={{ ...exercise, fields: stepFields }}
+                answer={stepAnswer}
+                setAnswer={(a) => setStep(s.id, a)}
+                disabled={disabled}
+              />
+            ) : s.kind === 'detection' ? (
+              <DetectionBody
+                exercise={{ ...exercise, candidates: stepCandidates }}
+                answer={stepAnswer}
+                setAnswer={(a) => setStep(s.id, a)}
+                disabled={disabled}
+              />
+            ) : (
+              <Textarea
+                value={
+                  typeof steps[s.id] === 'string'
+                    ? (steps[s.id] as string)
+                    : ((steps[s.id] as Record<string, unknown>)?.essay as Record<string, string>)?.text ?? ''
+                }
+                onChange={(e) => setStep(s.id, { essay: { text: e.target.value } })}
+                placeholder="Votre réponse…"
+                className="min-h-24"
+                disabled={disabled}
+              />
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

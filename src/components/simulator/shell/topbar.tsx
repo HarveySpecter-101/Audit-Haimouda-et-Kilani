@@ -82,7 +82,7 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
   )
 
   return (
-    <header className="no-print sticky top-0 z-30 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85">
+    <header className="no-print sticky top-0 z-30 border-b bg-background shadow-xs">
       <div className="flex min-h-14 flex-wrap items-center gap-x-2 gap-y-1.5 px-3 py-2 sm:h-14 sm:flex-nowrap sm:gap-y-0 sm:py-0 sm:px-4">
         <Button variant="ghost" size="icon" className="lg:hidden" onClick={onOpenMobile} aria-label="Ouvrir la navigation">
           <Menu className="size-5" />

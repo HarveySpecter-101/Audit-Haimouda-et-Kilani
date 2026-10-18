@@ -661,17 +661,17 @@ function ExerciseRow({
   }
   return (
     <button
-      className={`flex w-full flex-wrap items-center gap-2 rounded-md border p-3 text-left text-sm transition-colors hover:bg-accent/40 ${
-        selected ? 'border-primary/50 bg-primary/5' : ''
+      className={`flex w-full items-center gap-2.5 rounded-md border p-3 text-left text-sm transition-colors hover:bg-accent/40 ${
+        selected ? 'border-primary/60 bg-primary/5 ring-1 ring-primary/20' : 'bg-card'
       }`}
       onClick={onSelect}
     >
-      <Badge variant="outline" className="shrink-0">
+      <Badge variant="outline" className="shrink-0 text-xs font-normal">
         {kindLabel[exercise.kind] ?? exercise.kind}
       </Badge>
-      <span className="flex-1">{exercise.title}</span>
-      <span className="text-xs text-muted-foreground">{exercise.points} pts</span>
-      {exercise.critical ? <Badge variant="destructive">Critique</Badge> : null}
+      <span className="flex-1 min-w-0 leading-snug break-words">{exercise.title}</span>
+      <span className="shrink-0 text-xs text-muted-foreground">{exercise.points} pts</span>
+      {exercise.critical ? <Badge variant="destructive" className="shrink-0 text-xs">Critique</Badge> : null}
       <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
     </button>
   )

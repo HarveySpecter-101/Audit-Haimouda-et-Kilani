@@ -368,25 +368,50 @@ function QcmBody({
   }
   if (exercise.multi) {
     return (
-      <div className="space-y-2">
-        {exercise.choices?.map((c) => (
-          <label key={c.id} className="flex cursor-pointer items-start gap-2.5 rounded-md border p-3 text-sm hover:bg-accent/40">
-            <Checkbox checked={selected.includes(c.id)} onCheckedChange={() => toggle(c.id)} disabled={disabled} />
-            <span>{c.text}</span>
-          </label>
-        ))}
+      <div className="space-y-2.5">
+        {exercise.choices?.map((c) => {
+          const isChecked = selected.includes(c.id)
+          return (
+            <label
+              key={c.id}
+              className={`flex cursor-pointer items-start gap-3 rounded-md border p-3.5 text-sm transition-colors hover:bg-accent/40 ${
+                isChecked ? 'border-primary/60 bg-primary/5 ring-1 ring-primary/20' : 'bg-card'
+              }`}
+            >
+              <Checkbox
+                checked={isChecked}
+                onCheckedChange={() => toggle(c.id)}
+                disabled={disabled}
+                className="mt-0.5 shrink-0"
+              />
+              <span className="flex-1 min-w-0 leading-relaxed break-words">{c.text}</span>
+            </label>
+          )
+        })}
         <p className="text-xs text-muted-foreground">Plusieurs réponses possibles.</p>
       </div>
     )
   }
   return (
-    <RadioGroup value={selected[0] ?? ''} onValueChange={(v) => !disabled && setAnswer({ ...answer, qcm: { choiceIds: [v] } })} className="gap-2">
-      {exercise.choices?.map((c) => (
-        <label key={c.id} className="flex cursor-pointer items-start gap-2.5 rounded-md border p-3 text-sm hover:bg-accent/40">
-          <RadioGroupItem value={c.id} disabled={disabled} />
-          <span>{c.text}</span>
-        </label>
-      ))}
+    <RadioGroup
+      value={selected[0] ?? ''}
+      onValueChange={(v) => !disabled && setAnswer({ ...answer, qcm: { choiceIds: [v] } })}
+      className="gap-2.5"
+    >
+      {exercise.choices?.map((c) => {
+        const isChecked = selected[0] === c.id
+        return (
+          <label
+            key={c.id}
+            className={`flex cursor-pointer items-start gap-3 rounded-md border p-3.5 text-sm transition-colors hover:bg-accent/40 ${
+              isChecked ? 'border-primary/60 bg-primary/5 ring-1 ring-primary/20' : 'bg-card'
+            }`}
+          >
+            <RadioGroupItem value={c.id} disabled={disabled} className="mt-0.5 shrink-0" />
+            <span className="flex-1 min-w-0 leading-relaxed break-words">{c.text}</span>
+          </label>
+        )
+      })}
     </RadioGroup>
   )
 }
@@ -647,15 +672,28 @@ function DetectionBody({
   return (
     <div className="space-y-2">
       <p className="text-xs text-muted-foreground">Cochez les éléments anormaux (et uniquement eux).</p>
-      {exercise.candidates?.map((c) => (
-        <label key={c.id} className="flex cursor-pointer items-start gap-2.5 rounded-md border p-3 text-sm hover:bg-accent/40">
-          <Checkbox checked={selected.includes(c.id)} onCheckedChange={() => toggle(c.id)} disabled={disabled} />
-          <div>
-            <p>{c.label}</p>
-            {c.meta ? <p className="text-xs text-muted-foreground">{c.meta}</p> : null}
-          </div>
-        </label>
-      ))}
+      {exercise.candidates?.map((c) => {
+        const isChecked = selected.includes(c.id)
+        return (
+          <label
+            key={c.id}
+            className={`flex cursor-pointer items-start gap-3 rounded-md border p-3.5 text-sm transition-colors hover:bg-accent/40 ${
+              isChecked ? 'border-primary/60 bg-primary/5 ring-1 ring-primary/20' : 'bg-card'
+            }`}
+          >
+            <Checkbox
+              checked={isChecked}
+              onCheckedChange={() => toggle(c.id)}
+              disabled={disabled}
+              className="mt-0.5 shrink-0"
+            />
+            <div className="flex-1 min-w-0 leading-relaxed break-words">
+              <p className="font-medium text-foreground">{c.label}</p>
+              {c.meta ? <p className="mt-0.5 text-xs text-muted-foreground">{c.meta}</p> : null}
+            </div>
+          </label>
+        )
+      })}
     </div>
   )
 }
@@ -843,7 +881,7 @@ function FeedbackPanel({ feedback }: { feedback: AttemptFeedback }) {
           )}
         </div>
       ) : null}
-      <div className="rounded-md bg-background/60 p-2.5 text-sm">
+      <div className="rounded-md border bg-card/90 p-3 text-sm shadow-xs">
         <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Réflexe de collaborateur expérimenté
         </p>

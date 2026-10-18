@@ -49,7 +49,7 @@ export function ScrollTopButton() {
       title="Retour en haut (défilement fluide) — l’anneau matérialise la progression de lecture"
       onClick={scrollToTop}
       style={{ ['--scroll-progress' as string]: '0' }}
-      className={`no-print fixed bottom-20 right-4 z-40 size-10 rounded-full border-border/80 bg-card/95 shadow-lg backdrop-blur transition-all duration-300 sm:bottom-6 ${
+      className={`no-print fixed bottom-6 right-4 z-40 size-10 rounded-full border-border/80 bg-card shadow-lg transition-all duration-300 ${
         visible ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-3 opacity-0'
       }`}
       tabIndex={visible ? 0 : -1}

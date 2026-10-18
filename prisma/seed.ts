@@ -9,7 +9,13 @@ import { ALL_MODULES } from '../src/lib/data/module-codes'
 import { COMPETENCIES } from '../src/lib/data/competencies'
 import { DELIVERABLES_CATALOG } from '../src/lib/data/deliverables-catalog'
 
-const db = new PrismaClient()
+const db = new PrismaClient({
+  datasources: {
+    db: {
+      url: process.env.DIRECT_URL || process.env.DATABASE_URL,
+    },
+  },
+})
 
 function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100
@@ -82,7 +88,7 @@ async function main() {
   }
 
   console.log(`— Insertion des ${NOVATECH.entries.length} écritures…`)
-  const batchSize = 200
+  const batchSize = 50
   for (let i = 0; i < NOVATECH.entries.length; i += batchSize) {
     const batch = NOVATECH.entries.slice(i, i + batchSize)
     await db.$transaction(
@@ -110,11 +116,11 @@ async function main() {
         }),
       ),
     )
+    process.stdout.write(`  ${Math.min(i + batchSize, NOVATECH.entries.length)}/${NOVATECH.entries.length} écritures\r`)
   }
-
-  console.log(`— Insertion des ${NOVATECH.documents.length} documents…`)
-  for (let i = 0; i < NOVATECH.documents.length; i += 200) {
-    const batch = NOVATECH.documents.slice(i, i + 200)
+  console.log(`\n— Insertion des ${NOVATECH.documents.length} documents…`)
+  for (let i = 0; i < NOVATECH.documents.length; i += 100) {
+    const batch = NOVATECH.documents.slice(i, i + 100)
     await db.$transaction(
       batch.map((d) =>
         db.document.create({
